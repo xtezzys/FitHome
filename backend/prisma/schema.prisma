@@ -23,11 +23,28 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  settings UserSettings?
-  programs Program[]
-  workouts Workout[]
+  exercises     Exercise[] // обратная связь для персональных упражнений (Exercise.userId)
+  settings      UserSettings?
+  programs      Program[]
+  workouts      Workout[]
+  refreshTokens RefreshToken[]
 
   @@map("users")
+}
+
+/// Refresh-сессия: хранится только SHA-256-хеш refresh-токена (docs/database.md §2.8)
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique // sha256-хеш refresh-токена — не хранится в открытом виде
+  expiresAt DateTime // момент истечения (30 дней с выдачи)
+  createdAt DateTime  @default(now())
+  revokedAt DateTime? // момент ротации/выхода; не null — сессия отозвана
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }
 
 /// Настройки пользователя — ровно одна запись на пользователя (docs/database.md §2.2)

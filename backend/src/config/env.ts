@@ -13,6 +13,7 @@ export interface Env {
   databaseUrl: string;
   jwtAccessSecret: string;
   jwtRefreshSecret: string;
+  corsOrigin: string;
 }
 
 /** Читает и валидирует обязательные переменные окружения. */
@@ -37,5 +38,19 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     databaseUrl: databaseUrl as string,
     jwtAccessSecret: jwtAccessSecret as string,
     jwtRefreshSecret: jwtRefreshSecret as string,
+    corsOrigin: source.CORS_ORIGIN ?? 'http://localhost:5173',
   };
+}
+
+let cachedEnv: Env | null = null;
+
+/**
+ * Ленивое чтение окружения с кэшированием: позволяет тестам задать
+ * process.env до первого обращения, а модулям — не требовать env на импорте.
+ */
+export function getEnv(): Env {
+  if (!cachedEnv) {
+    cachedEnv = loadEnv();
+  }
+  return cachedEnv;
 }

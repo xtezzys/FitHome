@@ -61,8 +61,9 @@
 // 201 Created
 { "user": { "id": 1, "email": "user@example.com", "name": "Алексей" },
   "accessToken": "eyJ..." }
-// + Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Lax; Path=/api/auth
+// + Set-Cookie: refreshToken=...; HttpOnly; SameSite=Lax; Path=/api/auth (Secure — в production, см. architecture.md §5)
 // При регистрации также создаётся UserSettings со значениями по умолчанию (см. database.md §2.2)
+// В refresh_tokens хранится только SHA-256-хеш токена (см. database.md §2.8)
 ```
 
 Ошибки: `400 VALIDATION_ERROR` (невалидный email/пароль), `409 CONFLICT` (email занят).
@@ -97,6 +98,24 @@
 // 200 OK
 { "id": 1, "email": "user@example.com", "name": "Алексей", "createdAt": "2026-11-11T10:00:00.000Z" }
 // 401 UNAUTHORIZED — нет/просрочен access-токен
+```
+
+### PUT `/api/auth/me`
+
+Редактирование профиля (этап 2). Требуется `Authorization: Bearer`.
+
+```json
+// Запрос: имя и/или смена пароля. Смена пароля требует текущий пароль;
+// после смены все refresh-сессии отзываются — на других устройствах нужен повторный вход.
+{ "name": "Лёша" }
+{ "name": "Лёша", "currentPassword": "oldpass12", "newPassword": "newpass123" }
+```
+
+```json
+// 200 OK → обновлённый профиль
+{ "id": 1, "email": "user@example.com", "name": "Лёша", "createdAt": "2026-11-11T10:00:00.000Z" }
+// 400 VALIDATION_ERROR — пустое имя / короткий новый пароль / нет currentPassword
+// 401 UNAUTHORIZED — неверный текущий пароль
 ```
 
 ## 3. Упражнения — `/api/exercises`

@@ -149,6 +149,8 @@ erDiagram
 | Удаление тренировки | Каскад: WorkoutResult |
 | Названия упражнений пользователя уникальны | `@@unique([userId, name])` (общие проверяются на уровне service) |
 | Целевые поля ProgramExercise соответствуют метрике | Проверка на уровне services (`metric === 'time'` → заполнен `targetDuration` и т.д.) |
+| Refresh-токен не хранится в открытом виде | В `RefreshToken.tokenHash` — только SHA-256-хеш; повторное использование отозванного токена отзывает все сессии пользователя |
+| 1 пользователь — много refresh-сессий | `RefreshToken.userId` FK → User (cascade delete) |
 
 ## 4. Соответствие документации и Prisma
 
@@ -168,6 +170,21 @@ erDiagram
 | ProgramExercise | unique `(programId, order)`, `exerciseId` | Упорядоченный состав |
 | Workout | `(userId, performedAt)` | История и статистика по датам |
 | WorkoutResult | `workoutId`, `exerciseId` | Выборка результатов тренировки, прогресс упражнения |
+
+### 2.8. RefreshToken — refresh-сессия (добавлено на этапе 2)
+
+Сессия авторизации: в БД хранится только SHA-256-хеш refresh-токена — утечка базы не раскрывает действующие токены. Ротация: при каждом `/api/auth/refresh` старая запись помечается `revokedAt` и создаётся новая. Повторное использование отозванного токена — сигнал компрометации: отзываются все сессии пользователя.
+
+| Поле | Тип | Constraints | Описание |
+|---|---|---|---|
+| `id` | Int | PK, autoincrement | Идентификатор |
+| `userId` | Int | FK → User, not null | Владелец сессии (cascade delete) |
+| `tokenHash` | String | unique, not null | SHA-256-хеш refresh-токена |
+| `expiresAt` | DateTime | not null | Момент истечения (30 дней с выдачи) |
+| `createdAt` | DateTime | not null, default now | Момент выдачи |
+| `revokedAt` | DateTime | nullable | Момент ротации/выхода; не null — сессия отозвана |
+
+Индексы: `@@index([userId])`, unique `tokenHash`.
 
 ## 7. Объёмы данных (оценка)
 

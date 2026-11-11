@@ -43,11 +43,14 @@ backend/src/**/__tests__/
 
 ### 3.3. Ключевые сценарии (по этапам)
 
-**Этап 2 — авторизация:**
-- регистрация создаёт пользователя и настройки; дубликат email → 409;
-- вход с верными/неверными данными (сообщение не раскрывает, что неверно);
-- refresh-ротация: старый refresh-токен отклоняется после использования;
-- доступ к защищённым эндпоинтам без/с/с просроченным токеном.
+**Этап 2 — авторизация (реализовано):**
+- регистрация создаёт пользователя и настройки; дубликат email → 409 (`auth.service.test.ts`);
+- bcrypt-хеш пароля проверяется `compare`, пароль не хранится открытым текстом;
+- вход с верными/неверными данными (сообщение не раскрывает, что неверно) — единый текст для неверного email и пароля;
+- refresh-ротация: старый refresh-токен отклоняется после использования; повторное использование отозванного токена отзывает все сессии;
+- доступ к защищённым эндпоинтам без/с/с просроченным/чужим токеном (`auth.middleware.test.ts`);
+- HTTP-контракты [api.md §2](api.md#2-авторизация--apiauth): 201/200/204/400/401/409, cookie `HttpOnly; SameSite=Lax; Path=/api/auth`, `Max-Age=0` при logout (`auth.routes.test.ts`, supertest);
+- frontend: HTTP-клиент (Bearer из памяти, retry после refresh, токен не в localStorage — `client.test.ts`), формы входа и регистрации (`LoginPage.test.tsx`, `RegisterPage.test.tsx`).
 
 **Этап 3 — упражнения и программы:**
 - пользователь видит общие упражнения + только свои персональные;
@@ -104,11 +107,15 @@ npm run test:coverage      # coverage в .coverage/ (в .gitignore)
 | e2e | Playwright (отдельное решение на этапе 4+) | после стабилизации потоков |
 | Проверка перехода на PostgreSQL | прогон интеграционных тестов repositories с `DATABASE_URL` PostgreSQL | этап 6 ([database.md §8](database.md#8-стратегия-перехода-sqlite--postgresql)) |
 
-## 7. Текущее покрытие этапа 1
+## 7. Текущее покрытие этапа 2
 
 | Тест | Что проверяет | Где |
 |---|---|---|
 | `backend/src/__tests__/app.test.ts` | `/api/health` отвечает 200 и JSON-форматом из [api.md §8](api.md#8-здоровье-сервиса); неизвестный маршрут → 404 | backend |
+| `backend/src/services/__tests__/auth.service.test.ts` | register/login/refresh/logout: транзакция User+UserSettings, bcrypt, ротация с отзывом сессий при replay | backend |
+| `backend/src/middlewares/__tests__/auth.middleware.test.ts` | 401 без/с мусорным/чужим токеном; `req.userId` при валидном | backend |
+| `backend/src/routes/__tests__/auth.routes.test.ts` | Контракты [api.md §2](api.md#2-авторизация--apiauth) через supertest | backend |
 | `frontend/src/__tests__/App.test.tsx` | `App` рендерится без ошибок | frontend |
-
-Эти smoke-тесты служат проверкой целостности конфигурации Vitest в обоих пакетах и будут дополнены тестами функциональности на этапах 2–5.
+| `frontend/src/api/__tests__/client.test.ts` | Bearer из памяти, retry после refresh, разбор ошибок, токен не в storage | frontend |
+| `frontend/src/pages/__tests__/LoginPage.test.tsx` | Валидация формы, вызов login, ошибка сервера в баннере | frontend |
+| `frontend/src/pages/__tests__/RegisterPage.test.tsx` | Валидация формы, вызов register, 409-ошибка в баннере | frontend |

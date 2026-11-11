@@ -1,24 +1,28 @@
 /**
  * Дизайн-токены и базовые стили (docs/design.md §4).
- * Светлая тема — значения по умолчанию; тёмная переопределяется
- * селектором [data-theme="dark"] на этапе 2.
+ * Тёмная тема — основная: фон #101418, карточки #1B2229, акцент #A3E635.
+ * Шрифт Inter (index.html) с системным фолбэком.
+ * Светлая тема задаётся селектором [data-theme="light"] — этап 5 (настройки).
  */
 
 :root {
-  /* Цвета */
-  --color-primary: #2f6fed;
-  --color-primary-hover: #1e5be0;
-  --color-success: #22a55f;
-  --color-danger: #e0482f;
-  --color-warning: #f0a13c;
-  --color-bg: #f5f6fa;
-  --color-surface: #ffffff;
-  --color-text: #1c2333;
-  --color-text-muted: #697086;
-  --color-border: #e2e5ec;
+  /* Цвета — тёмная тема по умолчанию */
+  --color-bg: #101418;
+  --color-surface: #1b2229;
+  --color-surface-raised: #232c35;
+  --color-primary: #a3e635;
+  --color-primary-hover: #b7f056;
+  --color-on-primary: #101418;
+  --color-success: #4ade80;
+  --color-danger: #f2695c;
+  --color-danger-surface: rgba(242, 105, 92, 0.12);
+  --color-warning: #fbbf24;
+  --color-text: #ecf1f6;
+  --color-text-muted: #939eac;
+  --color-border: #2a333d;
 
   /* Типографика */
-  --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-size-base: 16px;
   --font-size-h1: 24px;
   --font-size-h2: 20px;
@@ -35,8 +39,21 @@
   --radius-s: 8px;
   --radius-m: 12px;
   --radius-l: 16px;
-  --shadow-s: 0 1px 3px rgba(28, 35, 51, 0.08);
-  --shadow-l: 0 8px 24px rgba(28, 35, 51, 0.16);
+  --shadow-s: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-l: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Светлая тема — переопределяется через data-theme="light" (этап 5) */
+[data-theme='light'] {
+  --color-bg: #f5f6fa;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-primary: #2f6fed;
+  --color-primary-hover: #1e5be0;
+  --color-on-primary: #ffffff;
+  --color-text: #1c2333;
+  --color-text-muted: #697086;
+  --color-border: #e2e5ec;
 }
 
 html,
@@ -57,4 +74,10 @@ body {
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* Фокус-кольца на всех интерактивных элементах (docs/design.md §7) */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

@@ -95,9 +95,10 @@ routes → controllers → services → repositories → Prisma
 ## 5. Авторизация (JWT)
 
 - **Access-токен**: срок жизни 15 минут, хранится в памяти SPA, передаётся в заголовке `Authorization: Bearer <token>`.
-- **Refresh-токен**: срок жизни 30 дней, httpOnly + Secure + SameSite=Lax cookie, ротация при каждом обновлении.
+- **Refresh-токен**: срок жизни 30 дней, opaque-строка в httpOnly + SameSite=Lax cookie (`Path=/api/auth`; флаг `Secure` — в production), ротация при каждом обновлении. В БД (модель `RefreshToken`, [database.md §2.8](database.md#28-refreshtoken--refresh-сессия-добавлено-на-этапе-2)) хранится только SHA-256-хеш; повторное использование отозванного токена отзывает все сессии пользователя.
 - `/api/auth/refresh` — единственный публичный эндпоинт, использующий cookie.
 - Пароли: bcrypt (cost 10). Секреты — только из переменных окружения (см. `backend/.env.example`).
+- CORS с credentials: SPA (:5173) и API (:4000) — разные origin; разрешённый origin задаётся `CORS_ORIGIN`.
 
 ## 6. Готовность к переходу SQLite → PostgreSQL
 
@@ -117,6 +118,7 @@ routes → controllers → services → repositories → Prisma
 | `DATABASE_URL` | backend | Строка подключения (SQLite: `file:./dev.db`) |
 | `JWT_ACCESS_SECRET` | backend | Секрет подписи access-токенов |
 | `JWT_REFRESH_SECRET` | backend | Секрет подписи refresh-токенов |
+| `CORS_ORIGIN` | backend | Origin SPA для CORS с credentials (по умолчанию `http://localhost:5173`) |
 | `VITE_API_BASE_URL` | frontend | Базовый URL API (по умолчанию `http://localhost:4000`) |
 
 `config/env.ts` валидирует обязательные переменные при старте — приложение не поднимается с некорректной конфигурацией.
