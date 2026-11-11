@@ -1,0 +1,143 @@
+// Схема БД FitHome — 7 сущностей.
+// Каноническое описание полей и правил целостности: docs/database.md
+// Контракты API, работающие с этими сущностями: docs/api.md
+//
+// Переход на PostgreSQL (docs/database.md §8) требует изменения только
+// поля `provider` ниже и переменной DATABASE_URL в .env.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // при переходе на PostgreSQL: provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Учётная запись пользователя (docs/database.md §2.1)
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique // логин, хранится в нижнем регистре
+  passwordHash String // bcrypt-хеш пароля (cost 10)
+  name         String // отображаемое имя
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  settings UserSettings?
+  programs Program[]
+  workouts Workout[]
+
+  @@map("users")
+}
+
+/// Настройки пользователя — ровно одна запись на пользователя (docs/database.md §2.2)
+model UserSettings {
+  id              Int     @id @default(autoincrement())
+  userId          Int     @unique
+  unit            String  @default("kg") // "kg" | "lb"
+  theme           String  @default("system") // "light" | "dark" | "system"
+  reminderTime    String? // время напоминания "HH:mm" (локальное)
+  reminderEnabled Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_settings")
+}
+
+/// Упражнение: общее (userId = null) или персональное (docs/database.md §2.3)
+model Exercise {
+  id           Int      @id @default(autoincrement())
+  name         String
+  description  String?
+  place        String // "home" | "outdoor" | "gym"
+  metric       String // "reps" | "reps_weight" | "time"
+  muscleGroups String // группы мышц через запятую, например "chest, triceps"
+  userId       Int? // null — общее упражнение каталога
+  createdAt    DateTime @default(now())
+
+  user            User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programExercise ProgramExercise[]
+  workoutResults  WorkoutResult[]
+
+  @@unique([userId, name])
+  @@index([place])
+  @@index([userId])
+  @@map("exercises")
+}
+
+/// Программа тренировок пользователя; удаление — soft delete через isActive (docs/database.md §2.4)
+model Program {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  name        String
+  description String?
+  place       String // "home" | "outdoor" | "gym"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises ProgramExercise[]
+  workouts  Workout[]
+
+  @@index([userId, isActive])
+  @@map("programs")
+}
+
+/// Упражнение в составе программы с целевыми нагрузками (docs/database.md §2.5)
+model ProgramExercise {
+  id            Int     @id @default(autoincrement())
+  programId     Int
+  exerciseId    Int
+  order         Int // порядок выполнения в программе (с 1)
+  targetSets    Int     @default(3)
+  targetReps    Int? // для метрики "reps" и "reps_weight"
+  targetWeight  Decimal? // для метрики "reps_weight"
+  targetDuration Int? // сек, для метрики "time"
+
+  program  Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@unique([programId, order])
+  @@index([exerciseId])
+  @@map("program_exercises")
+}
+
+/// Выполненная тренировка; programId = null — свободная тренировка (docs/database.md §2.6)
+model Workout {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  programId   Int?
+  place       String // "home" | "outdoor" | "gym"
+  performedAt DateTime @default(now())
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program Program?        @relation(fields: [programId], references: [id], onDelete: SetNull)
+  results WorkoutResult[]
+
+  @@index([userId, performedAt])
+  @@map("workouts")
+}
+
+/// Результат одного упражнения в рамках тренировки (docs/database.md §2.7)
+model WorkoutResult {
+  id         Int      @id @default(autoincrement())
+  workoutId  Int
+  exerciseId Int
+  sets       Int
+  reps       Int? // для метрик "reps" и "reps_weight"
+  weight     Decimal? // для метрики "reps_weight"
+  duration   Int? // сек, для метрики "time"
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  workout  Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@index([workoutId])
+  @@index([exerciseId])
+  @@map("workout_results")
+}

@@ -1,0 +1,35 @@
+# Зависимости
+node_modules/
+
+# Сборка
+dist/
+build/
+
+# Переменные окружения
+.env
+.env.local
+.env.*.local
+
+# SQLite (файлы БД)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Prisma
+backend/prisma/migrations/**/migration_lock.toml.bak
+
+# Логи
+logs/
+*.log
+npm-debug.log*
+
+# Редакторы и ОС
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Покрытие тестами
+coverage/

@@ -1,0 +1,60 @@
+/**
+ * Дизайн-токены и базовые стили (docs/design.md §4).
+ * Светлая тема — значения по умолчанию; тёмная переопределяется
+ * селектором [data-theme="dark"] на этапе 2.
+ */
+
+:root {
+  /* Цвета */
+  --color-primary: #2f6fed;
+  --color-primary-hover: #1e5be0;
+  --color-success: #22a55f;
+  --color-danger: #e0482f;
+  --color-warning: #f0a13c;
+  --color-bg: #f5f6fa;
+  --color-surface: #ffffff;
+  --color-text: #1c2333;
+  --color-text-muted: #697086;
+  --color-border: #e2e5ec;
+
+  /* Типографика */
+  --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-size-base: 16px;
+  --font-size-h1: 24px;
+  --font-size-h2: 20px;
+  --font-size-small: 14px;
+
+  /* Отступы (шаг ×2) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+
+  /* Радиусы и тени */
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 16px;
+  --shadow-s: 0 1px 3px rgba(28, 35, 51, 0.08);
+  --shadow-l: 0 8px 24px rgba(28, 35, 51, 0.16);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
