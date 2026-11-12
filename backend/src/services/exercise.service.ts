@@ -39,10 +39,16 @@ export async function listExercises(
   userId: number,
   query: ExerciseListQuery,
 ): Promise<{ data: ExerciseDto[]; meta: PaginationMeta }> {
-  // Видимость: общие + персональные текущего пользователя.
-  // CSV-фильтры — any-match по списку токенов (OR между contains одного поля
-  // выражается через верхнеуровневый OR внутри AND-группы).
-  const and: Prisma.ExerciseWhereInput[] = [{ OR: [{ userId: null }, { userId }] }];
+  // Видимость по scope (docs/api.md §3): all = общие + свои, shared = только
+  // базовые, mine = только свои. CSV-фильтры — any-match по списку токенов
+  // (OR между contains одного поля выражается через верхнеуровневый OR внутри AND-группы).
+  const visibility: Prisma.ExerciseWhereInput =
+    query.scope === 'shared'
+      ? { userId: null }
+      : query.scope === 'mine'
+        ? { userId }
+        : { OR: [{ userId: null }, { userId }] };
+  const and: Prisma.ExerciseWhereInput[] = [visibility];
   if (query.muscle?.length) {
     and.push({ OR: query.muscle.map((t) => ({ muscleGroups: { contains: `,${t},` } })) });
   }

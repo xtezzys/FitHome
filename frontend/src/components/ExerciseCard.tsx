@@ -30,13 +30,6 @@ export function ExerciseCard({ exercise, onOpen }: ExerciseCardProps) {
         <span className={`badge badge--difficulty-${exercise.difficulty}`}>
           {label(DIFFICULTY_LABELS, exercise.difficulty)}
         </span>
-        {exercise.equipment.length > 0 && (
-          <span className="badge">
-            {exercise.equipment.length > 1
-              ? `${exercise.equipment.length} ед. инвентаря`
-              : exercise.equipment[0]}
-          </span>
-        )}
       </div>
       <div className="exercise-card__muscles">
         {exercise.muscleGroups.map((token) => (

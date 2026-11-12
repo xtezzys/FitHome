@@ -132,6 +132,7 @@
 
 ### GET `/api/exercises`
 
+Параметр `scope` (`all` по умолчанию | `shared` — только базовые | `mine` — только свои).
 Фильтры: `place` (`home|outdoor|gym`), `muscle` (любое из значений, any-match),
 `difficulty` (`easy|medium|hard`), `equipment` (точное совпадение целого токена —
 CSV хранится в каноническом формате database.md §2.3), `metric`, `search` (поиск

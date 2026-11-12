@@ -112,6 +112,24 @@ describe('GET /api/exercises', () => {
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
+  it('scope=shared/mine передаётся в репозиторий', async () => {
+    repo.listExercises.mockResolvedValue([[], 0]);
+    const shared = await request(app).get('/api/exercises?scope=shared').set(...AUTH());
+    expect(shared.status).toBe(200);
+    let [where] = repo.listExercises.mock.calls.at(-1) as never[];
+    expect((where as { AND: unknown[] }).AND).toContainEqual({ userId: null });
+
+    await request(app).get('/api/exercises?scope=mine').set(...AUTH());
+    [where] = repo.listExercises.mock.calls.at(-1) as never[];
+    expect((where as { AND: unknown[] }).AND).toContainEqual({ userId: 1 });
+  });
+
+  it('недопустимый scope → 400', async () => {
+    const res = await request(app).get('/api/exercises?scope=wrong').set(...AUTH());
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('недопустимое место → 400', async () => {
     const res = await request(app).get('/api/exercises?place=office').set(...AUTH());
     expect(res.status).toBe(400);

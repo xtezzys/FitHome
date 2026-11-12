@@ -24,6 +24,7 @@ import * as exercisesApi from '../../api/exercises';
 import * as authApi from '../../api/auth';
 import { ExercisesPage } from '../ExercisesPage';
 import { AuthProvider } from '../../context/AuthContext';
+import { MUSCLE_LABELS } from '../../lib/labels';
 import type { Exercise, Paginated } from '../../types/exercise';
 
 const USER_ID = 1;
@@ -268,5 +269,177 @@ describe('ExercisesPage — детали и CRUD', () => {
       expect(exercisesApi.updateExercise).toHaveBeenCalledWith(20, expect.objectContaining({ name: 'Отжимания с опорой' })),
     );
     expect(await screen.findByText('Упражнение обновлено')).toBeInTheDocument();
+  });
+});
+
+
+function makeItems(from: number, count: number): Exercise[] {
+  return Array.from({ length: count }, (_, i) =>
+    makeExercise({ id: from + i, name: `Упражнение ${from + i}`, userId: null }),
+  );
+}
+
+describe('ExercisesPage — вкладки Все / Базовые / Мои', () => {
+
+  it('по умолчанию активна вкладка «Все», запрос со scope=all', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(makePage(makeItems(1, 1)));
+    renderPage();
+    expect(await screen.findByText('Упражнение 1')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Все' })).toHaveAttribute('aria-selected', 'true');
+    const callsL = vi.mocked(exercisesApi.listExercises).mock.calls;
+    const last = callsL[callsL.length - 1]?.[0];
+    expect(last?.scope).toBe('all');
+  });
+
+  it('вкладка «Базовые» → scope=shared в запросе', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(makePage(makeItems(1, 1)));
+    renderPage();
+    await screen.findByText('Упражнение 1');
+    await userEvent.click(screen.getByRole('tab', { name: 'Базовые' }));
+    await waitFor(() => {
+      const callsL = vi.mocked(exercisesApi.listExercises).mock.calls;
+    const last = callsL[callsL.length - 1]?.[0];
+      expect(last?.scope).toBe('shared');
+    });
+  });
+
+  it('вкладка «Мои» → scope=mine и сброс страницы на первую', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue({
+      data: makeItems(1, 12),
+      meta: { page: 1, limit: 12, total: 30 },
+    });
+    renderPage();
+    await screen.findByText('Упражнение 1');
+    await userEvent.click(screen.getByRole('button', { name: 'Вперёд →' }));
+    await waitFor(() => {
+      const callsL = vi.mocked(exercisesApi.listExercises).mock.calls;
+    const last = callsL[callsL.length - 1]?.[0];
+      expect(last?.page).toBe(2);
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Мои' }));
+    await waitFor(() => {
+      const calls = vi.mocked(exercisesApi.listExercises).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      expect(last?.scope).toBe('mine');
+      expect(last?.page).toBe(1);
+    });
+  });
+
+  it('пустые «Мои» → своя заглушка', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(makePage([]));
+    renderPage();
+    await screen.findByText('Ничего не найдено');
+    await userEvent.click(screen.getByRole('tab', { name: 'Мои' }));
+    expect(await screen.findByText('У вас пока нет своих упражнений')).toBeInTheDocument();
+  });
+
+  it('вкладка «Базовые» — только общие упражнения (фронт передаёт scope, фильтрует backend)', async () => {
+    const shared = makeExercise({ id: 1, userId: null, name: 'Базовое' });
+    // Вкладка «Базовые»: backend вернул только общие
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(makePage([shared]));
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Базовые' }));
+    expect(await screen.findByText('Базовое')).toBeInTheDocument();
+    // Backend отфильтровал: персональных в ответе нет
+    expect(screen.queryByText('Своё')).not.toBeInTheDocument();
+  });
+});
+
+describe('ExercisesPage — сохранение прокрутки при пагинации', () => {
+  it('во время загрузки следующей страницы карточки остаются в DOM', async () => {
+    const first = makeItems(1, 12);
+    const second = makeItems(13, 12);
+    let resolveSecond: (value: Paginated<Exercise>) => void = () => {};
+    vi.mocked(exercisesApi.listExercises)
+      .mockResolvedValueOnce({ data: first, meta: { page: 1, limit: 12, total: 24 } })
+      .mockImplementationOnce(
+        () =>
+          new Promise<Paginated<Exercise>>((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    renderPage();
+    await screen.findByText('Упражнение 1');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Вперёд →' }));
+    // Список не схлопнулся: карточки первой страницы всё ещё в DOM
+    expect(screen.getByText('Упражнение 1')).toBeInTheDocument();
+    expect(screen.getByText('Упражнение 12')).toBeInTheDocument();
+
+    resolveSecond({ data: second, meta: { page: 2, limit: 12, total: 24 } });
+    await waitFor(() => expect(screen.getByText('Упражнение 13')).toBeInTheDocument());
+  });
+
+  it('позиция прокрутки восстанавливается после смены страницы (scrollY = 640)', async () => {
+    vi.mocked(exercisesApi.listExercises)
+      .mockResolvedValueOnce({ data: makeItems(1, 12), meta: { page: 1, limit: 12, total: 24 } })
+      .mockResolvedValueOnce({ data: makeItems(13, 12), meta: { page: 2, limit: 12, total: 24 } });
+    // Имитируем прокрутку пользователя до пагинации
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 640 });
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderPage();
+    await screen.findByText('Упражнение 1');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Вперёд →' }));
+    await waitFor(() => expect(scrollToSpy).toHaveBeenCalledWith(0, 640));
+    // Восстановление однократное — нет циклов прокрутки
+    expect(scrollToSpy.mock.calls.length).toBeLessThanOrEqual(2);
+
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    scrollToSpy.mockRestore();
+  });
+
+  it('пагинация не прокручивает страницу к началу (нет scrollTo(0, 0))', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue({
+      data: makeItems(1, 12),
+      meta: { page: 1, limit: 12, total: 24 },
+    });
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 480 });
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderPage();
+    await screen.findByText('Упражнение 1');
+    await userEvent.click(screen.getByRole('button', { name: 'Вперёд →' }));
+    await waitFor(() => {
+      const calls = vi.mocked(exercisesApi.listExercises).mock.calls;
+      expect(calls[calls.length - 1]?.[0]?.page).toBe(2);
+    });
+    expect(scrollToSpy).not.toHaveBeenCalledWith(0, 0);
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    scrollToSpy.mockRestore();
+  });
+
+  it('чипы каждого фильтра лежат в отдельном контейнере — переносы от одной левой границы', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(makePage([makeExercise()]));
+    const { container } = renderPage();
+    await screen.findByText('Отжимания');
+
+    const boxes = container.querySelectorAll('.catalog__filter-chips');
+    expect(boxes.length).toBe(4); // Место, Сложность, Мышцы, Инвентарь
+
+    const muscles = boxes[2];
+    const chips = muscles.querySelectorAll('.chip');
+    expect(chips.length).toBe(Object.keys(MUSCLE_LABELS).length);
+    // Все чипы — прямые дети одного flex-контейнера (перенос выравнивается слева)
+    chips.forEach((chip) => expect(chip.parentElement).toBe(muscles));
+  });
+});
+
+describe('ExercisesPage — без технических меток', () => {
+  it('raw-токен инвентаря не отображается в карточке', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(
+      makePage([makeExercise({ equipment: ['exercise_bike'] })]),
+    );
+    renderPage();
+    await screen.findByText('Отжимания');
+    expect(screen.queryByText('exercise_bike')).not.toBeInTheDocument();
+  });
+
+  it('raw-токены мышц не отображаются (русские подписи вместо них)', async () => {
+    vi.mocked(exercisesApi.listExercises).mockResolvedValue(makePage([makeExercise()]));
+    renderPage();
+    await screen.findByText('Отжимания');
+    expect(screen.queryByText('chest')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Грудь').length).toBeGreaterThan(0);
   });
 });

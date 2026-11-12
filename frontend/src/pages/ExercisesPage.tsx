@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AppLayout } from '../components/AppLayout';
 import { Button } from '../components/Button';
 import { Chip } from '../components/Chip';
@@ -46,11 +46,6 @@ const EMPTY_FORM: ExerciseInput = {
   equipment: [],
 };
 
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; data: Paginated<Exercise> }
-  | { status: 'error'; message: string };
-
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Ошибка загрузки';
 }
@@ -67,8 +62,14 @@ export function ExercisesPage() {
   const [equipment, setEquipment] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
-  // Данные
-  const [state, setState] = useState<LoadState>({ status: 'loading' });
+  // Вкладки: Все / Базовые / Мои (по умолчанию «Все»)
+  const [scope, setScope] = useState<'all' | 'shared' | 'mine'>('all');
+
+  // Данные: прошлый список сохраняется во время загрузки — сетка не схлопывается
+  // и позиция прокрутки не сбрасывается при пагинации
+  const [data, setData] = useState<Paginated<Exercise> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   // Модальные окна
@@ -88,23 +89,43 @@ export function ExercisesPage() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  // Пагинация находится ниже сетки: смена страницы меняет высоту контента и
+  // scroll anchoring браузера сдвигает позицию. Надёжное решение — запомнить
+  // scrollY в момент клика и восстановить в useLayoutEffect ПОСЛЕ обновления
+  // DOM (до отрисовки), без повторных циклов прокрутки.
+  const scrollYToRestore = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (scrollYToRestore.current !== null) {
+      window.scrollTo(0, scrollYToRestore.current);
+      scrollYToRestore.current = null;
+    }
+  }, [data]);
+  const handlePageChange = (nextPage: number) => {
+    scrollYToRestore.current = window.scrollY;
+    setPage(nextPage);
+  };
+
   const load = useCallback(async () => {
-    setState({ status: 'loading' });
+    setLoading(true);
+    setError(null);
     try {
-      const data = await listExercises({
+      const result = await listExercises({
         page,
         limit: PAGE_SIZE,
+        scope,
         place: place ?? undefined,
         difficulty: difficulty ?? undefined,
         muscle: muscle.length > 0 ? muscle : undefined,
         equipment: equipment.length > 0 ? equipment : undefined,
         search: search || undefined,
       });
-      setState({ status: 'ready', data });
+      setData(result);
     } catch (err) {
-      setState({ status: 'error', message: errorMessage(err) });
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
     }
-  }, [page, place, difficulty, muscle, equipment, search]);
+  }, [page, scope, place, difficulty, muscle, equipment, search]);
 
   useEffect(() => {
     void load();
@@ -113,7 +134,7 @@ export function ExercisesPage() {
   // Смена фильтров сбрасывает страницу на первую
   useEffect(() => {
     setPage(1);
-  }, [place, difficulty, muscle, equipment, search]);
+  }, [scope, place, difficulty, muscle, equipment, search]);
 
   const toggleMuscle = (token: string) =>
     setMuscle((prev) => (prev.includes(token) ? prev.filter((t) => t !== token) : [...prev, token]));
@@ -193,6 +214,25 @@ export function ExercisesPage() {
           </p>
         )}
 
+        <div className="catalog__tabs" role="tablist" aria-label="Тип упражнений">
+          {[
+            { key: 'all', label: 'Все' },
+            { key: 'shared', label: 'Базовые' },
+            { key: 'mine', label: 'Мои' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={scope === tab.key}
+              className={`catalog__tab${scope === tab.key ? ' catalog__tab--active' : ''}`}
+              onClick={() => setScope(tab.key as typeof scope)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <TextField
           label="Поиск по названию"
           value={searchInput}
@@ -203,83 +243,94 @@ export function ExercisesPage() {
         <section className="catalog__filters" aria-label="Фильтры">
           <div className="catalog__filter-group">
             <span className="catalog__filter-label">Место</span>
-            {Object.entries(PLACE_LABELS).map(([token, caption]) => (
-              <Chip
-                key={token}
-                label={caption}
-                active={place === token}
-                onClick={() => setPlace(place === token ? null : token)}
-              />
-            ))}
+            <div className="catalog__filter-chips">
+              {Object.entries(PLACE_LABELS).map(([token, caption]) => (
+                <Chip
+                  key={token}
+                  label={caption}
+                  active={place === token}
+                  onClick={() => setPlace(place === token ? null : token)}
+                />
+              ))}
+            </div>
           </div>
           <div className="catalog__filter-group">
             <span className="catalog__filter-label">Сложность</span>
-            {Object.entries(DIFFICULTY_LABELS).map(([token, caption]) => (
-              <Chip
-                key={token}
-                label={caption}
-                active={difficulty === token}
-                onClick={() => setDifficulty(difficulty === token ? null : token)}
-              />
-            ))}
+            <div className="catalog__filter-chips">
+              {Object.entries(DIFFICULTY_LABELS).map(([token, caption]) => (
+                <Chip
+                  key={token}
+                  label={caption}
+                  active={difficulty === token}
+                  onClick={() => setDifficulty(difficulty === token ? null : token)}
+                />
+              ))}
+            </div>
           </div>
           <div className="catalog__filter-group">
             <span className="catalog__filter-label">Мышцы</span>
-            {muscleKeys.map((token) => (
-              <Chip
-                key={token}
-                label={MUSCLE_LABELS[token]}
-                active={muscle.includes(token)}
-                onClick={() => toggleMuscle(token)}
-              />
-            ))}
+            <div className="catalog__filter-chips">
+              {muscleKeys.map((token) => (
+                <Chip
+                  key={token}
+                  label={MUSCLE_LABELS[token]}
+                  active={muscle.includes(token)}
+                  onClick={() => toggleMuscle(token)}
+                />
+              ))}
+            </div>
           </div>
           <div className="catalog__filter-group">
             <span className="catalog__filter-label">Инвентарь</span>
-            {equipmentKeys.map((token) => (
-              <Chip
-                key={token}
-                label={EQUIPMENT_LABELS[token]}
-                active={equipment.includes(token)}
-                onClick={() => toggleEquipment(token)}
-              />
-            ))}
+            <div className="catalog__filter-chips">
+              {equipmentKeys.map((token) => (
+                <Chip
+                  key={token}
+                  label={EQUIPMENT_LABELS[token]}
+                  active={equipment.includes(token)}
+                  onClick={() => toggleEquipment(token)}
+                />
+              ))}
+            </div>
           </div>
         </section>
 
-        {state.status === 'loading' && <Spinner label="Загрузка каталога…" />}
-
-        {state.status === 'error' && (
+        {error && (
           <div className="catalog__error" role="alert">
-            <p>{state.message}</p>
+            <p>{error}</p>
             <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
               Повторить
             </Button>
           </div>
         )}
 
-        {state.status === 'ready' && state.data.data.length === 0 && (
+        {loading && !data && <Spinner label="Загрузка каталога…" />}
+
+        {data && !loading && data.data.length === 0 && (
           <EmptyState
-            title="Ничего не найдено"
+            title={scope === 'mine' ? 'У вас пока нет своих упражнений' : 'Ничего не найдено'}
             hint="Измените фильтры или создайте собственное упражнение"
           >
             <Button onClick={openCreate}>+ Упражнение</Button>
           </EmptyState>
         )}
 
-        {state.status === 'ready' && state.data.data.length > 0 && (
+        {data && data.data.length > 0 && (
           <>
-            <div className="catalog__grid">
-              {state.data.data.map((exercise) => (
+            {/* Список остаётся в DOM во время загрузки — прокрутка сохраняется */}
+            <div className={`catalog__grid${loading ? ' catalog__grid--loading' : ''}`}>
+              {data.data.map((exercise) => (
                 <ExerciseCard key={exercise.id} exercise={exercise} onOpen={setDetail} />
               ))}
             </div>
-            <Pagination
-              page={state.data.meta.page}
-              limit={state.data.meta.limit}
-              total={state.data.meta.total}
-              onPageChange={setPage}
-            />
+            {!loading && (
+              <Pagination
+                page={data.meta.page}
+                limit={data.meta.limit}
+                total={data.meta.total}
+                onPageChange={handlePageChange}
+              />
+            )}
           </>
         )}
       </div>

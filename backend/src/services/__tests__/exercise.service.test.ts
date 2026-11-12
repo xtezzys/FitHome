@@ -44,14 +44,14 @@ beforeEach(() => {
 describe('exercise.service — listExercises', () => {
   it('строит where видимости: общие + персональные пользователя', async () => {
     repo.listExercises.mockResolvedValue([[], 0]);
-    await exerciseService.listExercises(USER, { page: 1, limit: 20 });
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'all' });
     const [where] = repo.listExercises.mock.calls[0];
     expect(where.AND).toContainEqual({ OR: [{ userId: null }, { userId: USER }] });
   });
 
   it('CSV-фильтр мышцы — точное совпадение целого токена (",chest,", не "chest,")', async () => {
     repo.listExercises.mockResolvedValue([[], 0]);
-    await exerciseService.listExercises(USER, { page: 1, limit: 20, muscle: ['chest'] });
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'all', muscle: ['chest'] });
     const [where] = repo.listExercises.mock.calls[0];
     const and = where.AND as Array<Record<string, unknown>>;
     expect(and).toContainEqual({ OR: [{ muscleGroups: { contains: ',chest,' } }] });
@@ -59,7 +59,7 @@ describe('exercise.service — listExercises', () => {
 
   it('несколько мышц — any-match (OR внутри AND-группы)', async () => {
     repo.listExercises.mockResolvedValue([[], 0]);
-    await exerciseService.listExercises(USER, { page: 1, limit: 20, muscle: ['chest', 'back'] });
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'all', muscle: ['chest', 'back'] });
     const [where] = repo.listExercises.mock.calls[0];
     const and = where.AND as Array<Record<string, unknown>>;
     expect(and).toContainEqual({
@@ -69,14 +69,49 @@ describe('exercise.service — listExercises', () => {
 
   it('поиск нормализует регистр кириллицы: «ОТЖИМ» → nameLower contains «отжим»', async () => {
     repo.listExercises.mockResolvedValue([[], 0]);
-    await exerciseService.listExercises(USER, { page: 1, limit: 20, search: 'ОТЖИМ' });
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'all', search: 'ОТЖИМ' });
     const [where] = repo.listExercises.mock.calls[0];
     expect(where.nameLower).toEqual({ contains: 'отжим' });
   });
 
+  it('scope=shared: видимость только общие упражнения (userId = null)', async () => {
+    repo.listExercises.mockResolvedValue([[], 0]);
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'shared' });
+    const [where] = repo.listExercises.mock.calls[0];
+    const and = where.AND as Array<Record<string, unknown>>;
+    expect(and).toContainEqual({ userId: null });
+    expect(JSON.stringify(and)).not.toContain(JSON.stringify([{ userId: null }, { userId: USER }]));
+  });
+
+  it('scope=mine: видимость только персональные упражнения пользователя', async () => {
+    repo.listExercises.mockResolvedValue([[], 0]);
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'mine' });
+    const [where] = repo.listExercises.mock.calls[0];
+    const and = where.AND as Array<Record<string, unknown>>;
+    expect(and).toContainEqual({ userId: USER });
+    expect(JSON.stringify(and)).not.toContain('{\"userId\":null}');
+  });
+
+  it('scope=all: общие + персональные (по умолчанию)', async () => {
+    repo.listExercises.mockResolvedValue([[], 0]);
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'all' });
+    const [where] = repo.listExercises.mock.calls[0];
+    const and = where.AND as Array<Record<string, unknown>>;
+    expect(and).toContainEqual({ OR: [{ userId: null }, { userId: USER }] });
+  });
+
+  it('scope=mine в сочетании с фильтром мышцы', async () => {
+    repo.listExercises.mockResolvedValue([[], 0]);
+    await exerciseService.listExercises(USER, { page: 1, limit: 20, scope: 'mine', muscle: ['chest'] });
+    const [where] = repo.listExercises.mock.calls[0];
+    const and = where.AND as Array<Record<string, unknown>>;
+    expect(and).toContainEqual({ userId: USER });
+    expect(and).toContainEqual({ OR: [{ muscleGroups: { contains: ',chest,' } }] });
+  });
+
   it('возвращает DTO с массивами токенов и meta пагинации', async () => {
     repo.listExercises.mockResolvedValue([[makeExercise()], 34]);
-    const result = await exerciseService.listExercises(USER, { page: 2, limit: 20, place: 'home', difficulty: 'easy', metric: 'reps' });
+    const result = await exerciseService.listExercises(USER, { page: 2, limit: 20, scope: 'all', place: 'home', difficulty: 'easy', metric: 'reps' });
     expect(result.data[0].muscleGroups).toEqual(['chest', 'triceps']);
     expect(result.data[0].equipment).toEqual([]);
     expect(result.meta).toEqual({ page: 2, limit: 20, total: 34 });

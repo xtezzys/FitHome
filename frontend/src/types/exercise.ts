@@ -26,10 +26,12 @@ export interface Paginated<T> {
   meta: { page: number; limit: number; total: number };
 }
 
-/** Параметры списка упражнений (docs/api.md §3). */
+/** Параметры списка упражнений (docs/api.md §3).
+ *  scope: all = базовые + свои; shared = только базовые; mine = только свои. */
 export interface ExerciseListParams {
   page?: number;
   limit?: number;
+  scope?: 'all' | 'shared' | 'mine';
   place?: string;
   metric?: string;
   difficulty?: string;

@@ -188,9 +188,14 @@ export function parseExerciseListQuery(query: unknown): ExerciseListQuery {
   if (!isRecordOfQuery(query)) {
     throw new AppError('VALIDATION_ERROR', 'Некорректные query-параметры');
   }
+  const scope = query.scope === undefined ? 'all' : query.scope;
+  if (scope !== 'all' && scope !== 'shared' && scope !== 'mine') {
+    throw new AppError('VALIDATION_ERROR', 'Параметр "scope" должен быть "all", "shared" или "mine"');
+  }
   return {
     page: parsePositiveInt(query.page ?? '1', 'page'),
     limit: parsePositiveInt(query.limit ?? '20', 'limit', LIMIT_MAX),
+    scope,
     place: optionalEnum(query.place, 'place', PLACES),
     metric: optionalEnum(query.metric, 'metric', METRICS),
     difficulty: optionalEnum(query.difficulty, 'difficulty', DIFFICULTIES),

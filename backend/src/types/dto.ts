@@ -81,10 +81,12 @@ export interface ProgramDto {
 
 // ─── Входные DTO этапа 3 (формируются валидаторами middlewares/validate.ts) ───
 
-/** Параметры списка упражнений (docs/api.md §3). muscle/equipment — канонические токены. */
+/** Параметры списка упражнений (docs/api.md §3). muscle/equipment — канонические токены.
+ *  scope: all = общие + персональные пользователя; shared = только базовые; mine = только свои. */
 export interface ExerciseListQuery {
   page: number;
   limit: number;
+  scope: 'all' | 'shared' | 'mine';
   place?: string;
   metric?: string;
   difficulty?: string;

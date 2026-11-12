@@ -10,6 +10,7 @@ function buildQuery(params: ExerciseListParams): string {
   const parts: string[] = [];
   if (params.page !== undefined) parts.push(`page=${params.page}`);
   if (params.limit !== undefined) parts.push(`limit=${params.limit}`);
+  if (params.scope && params.scope !== 'all') parts.push(`scope=${params.scope}`);
   if (params.place) parts.push(`place=${params.place}`);
   if (params.metric) parts.push(`metric=${params.metric}`);
   if (params.difficulty) parts.push(`difficulty=${params.difficulty}`);
