@@ -57,23 +57,33 @@ erDiagram
 |---|---|---|---|
 | `id` | Int | PK, autoincrement | Идентификатор |
 | `name` | String | not null | Название («Отжимания», «Приседания») |
+| `nameLower` | String | not null | Название в нижнем регистре для кириллического поиска (JS `toLowerCase` — SQL `lower()` в SQLite обрабатывает только ASCII, см. [stage0](stage0-experiments.md)) |
 | `description` | String | nullable | Описание и техника выполнения |
 | `place` | String | not null | Место выполнения: `home` \| `outdoor` \| `gym` |
 | `metric` | String | not null | Метрика результата: `reps` (повторы) \| `reps_weight` (повторы + вес) \| `time` (секунды) |
-| `muscleGroups` | String | not null | Группы мышц через запятую (`chest, triceps`) — без отдельной таблицы на этапе MVP |
+| `muscleGroups` | String | not null | Канонический CSV с ограничивающими запятыми: `",chest,triceps,"` — фильтры API проверяют точное совпадение целого токена (`contains ",chest,"`), substring-совпадение исключено |
+| `difficulty` | String | not null | Сложность: `easy` \| `medium` \| `hard` |
+| `equipment` | String | nullable | Канонический CSV инвентаря (`",dumbbell,bench,"`) или null — без инвентаря |
 | `userId` | Int | nullable, FK → User | null — общее упражнение; задан — персональное упражнение пользователя |
 | `createdAt` | DateTime | not null, default now | Дата создания |
 
-Индексы: `@@index([place])`, `@@index([userId])`, `@@unique([userId, name])`.
+Индексы: `@@index([place])`, `@@index([userId])`, `@@unique([userId, name])`. Индекс на `nameLower` не требуется
+при текущих объёмах (см. §7); `@@unique([userId, name])` в SQLite не дедуплицирует строки с `userId = null` —
+идемпотентность общих упражнений обеспечивает seed (findFirst).
+
+Нормализация (единая реализация — `backend/prisma/stage3/normalize.ts`): trim → lowercase; CSV-токены:
+trim, lowercase, пробел внутри токена → `_`, удаление пустых и дубликатов, сборка с ограничивающими запятыми;
+неизвестные (вне словаря) токены сохраняются.
 
 ### 2.4. Program — программа тренировок
 
-План, созданный пользователем: упорядоченный набор упражнений с целевыми нагрузками.
+План: упорядоченный набор упражнений с целевыми нагрузками. Либо программа пользователя,
+либо готовая программа каталога.
 
 | Поле | Тип | Constraints | Описание |
 |---|---|---|---|
 | `id` | Int | PK, autoincrement | Идентификатор |
-| `userId` | Int | FK → User, not null | Владелец программы |
+| `userId` | Int | nullable, FK → User | null — **готовая программа каталога** (общедоступна, read-only); задан — владелец |
 | `name` | String | not null | Название («Ключевой курс») |
 | `description` | String | nullable | Описание и цели программы |
 | `place` | String | not null | Контекст: `home` \| `outdoor` \| `gym` |
@@ -190,7 +200,41 @@ erDiagram
 
 Ожидаемые объёмы на одного пользователя (год активного использования): ~200 тренировок × ~6 результатов ≈ 1200 строк WorkoutResult, ~10–30 программ, ~50–100 персональных упражнений. Для сотен пользователей SQLite покрывает нагрузку; переход на PostgreSQL выполняется по плану ниже при росте или росте конкурентной записи.
 
-## 8. Стратегия перехода SQLite → PostgreSQL
+## 8. Миграция этапа 3 и seed — процедура
+
+Этап 3 добавляет колонки `nameLower`/`difficulty`/`equipment` в `exercises` и делает
+`programs.userId` nullable. Последовательность построена на результатах Шага 0
+([stage0-experiments.md](stage0-experiments.md)).
+
+**Миграции:**
+- `20261112000000_stage3_add_columns` (A) — nullable-колонки, безопасна на любой БД;
+- `20261112000100_stage3_exercises_programs_rebuild` (B) — rebuild `exercises` и
+  `programs` с парковочным DDL для дочерних таблиц (`program_exercises`, `workout_results`,
+  `workouts`) — Prisma Migrate 6.19.3 исполняет миграции с немедленной FK-проверкой
+  (`defer_foreign_keys` в его контексте не действует), поэтому DROP родителя возможен
+  только без детей. B защищён NOT NULL-guard'ом: `INSERT SELECT` копирует уже
+  заполненный JS-backfill'ом `nameLower` — на незаполненной базе миграция падает
+  ДО удаления данных.
+
+**Порядок (оркестратор `npm run stage3:migrate`, цель — переменная `STAGE3_DATABASE_URL`):**
+
+| База | Поведение |
+|---|---|
+| Свежая/пустая | `deploy` применяет A и B одним запуском (B на пустой таблице безопасен), затем `npm run db:seed` |
+| С данными | `deploy`: A применяется, B безопасно падает (guard) → recovery: возврат детей из парковок `_pe_park`/`_wr_park`/`_w_park`, удаление остатков `_new_*` → `db:backfill-stage3` (JS `toLowerCase` для кириллицы) → `db:verify-stage3` → `migrate resolve --rolled-back B` (работает только для failed) → повторный `deploy` → verify |
+
+**Восстановление после сбоя B** (выполняет оркестратор автоматически при подтверждённой
+ошибке `1299 NOT NULL constraint failed: _new_exercises.*`; при любой иной ошибке — остановка):
+возврат детей из парковок → удаление `_new_*` и парковок → backfill → verify → resolve → deploy.
+Проверено интеграционно: `npm run stage3:verify-integration` (сценарии «существующая БД +
+recovery» и «свежая БД», идемпотентность seed ×2).
+
+**Идемпотентный seed** (`prisma/seed.ts`, `npm run db:seed`): общие упражнения ищутся по
+`userId = null + nameLower`, готовые программы — по `userId = null + name`; существующие записи
+не изменяются, недостающие строки состава дополняются. Повторный запуск не создаёт дубликатов
+(в SQLite `@@unique([userId, name])` не дедуплицирует NULL-строки — см. §2.3).
+
+## 9. Стратегия перехода SQLite → PostgreSQL
 
 1. **Изоляция доступа** — обращения к Prisma только в `repositories` (см. [architecture.md](architecture.md)).
 2. **Совместимые типы** — в схеме нет специфичных для SQLite конструкций: перечисления хранятся строками, автоинкремент через `autoincrement()` (в PostgreSQL → `serial`), Decimal для весов.

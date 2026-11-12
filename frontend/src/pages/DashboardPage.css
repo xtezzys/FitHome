@@ -37,3 +37,13 @@
   border-radius: var(--radius-m);
   box-shadow: var(--shadow-s);
 }
+
+.dashboard__links {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.dashboard__link {
+  text-decoration: none;
+}

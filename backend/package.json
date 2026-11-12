@@ -12,12 +12,23 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "typecheck:tooling": "tsc --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --strict --esModuleInterop --skipLibCheck prisma/seed.ts prisma/backfill-stage3.ts prisma/verify-stage3.ts prisma/stage3/normalize.ts scripts/stage3-migrate.ts scripts/stage3-verify-integration.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "stage0:generate": "prisma generate --schema prisma/stage0/probe.prisma",
+    "stage0:run": "tsx prisma/stage0/run-all.ts",
+    "stage3:migrate": "tsx scripts/stage3-migrate.ts",
+    "stage3:verify-integration": "tsx scripts/stage3-verify-integration.ts",
+    "db:backfill-stage3": "tsx prisma/backfill-stage3.ts",
+    "db:verify-stage3": "tsx prisma/verify-stage3.ts",
+    "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",

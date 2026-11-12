@@ -4,6 +4,9 @@ import { Spinner } from './components/Spinner';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { ExercisesPage } from './pages/ExercisesPage';
+import { ProgramsPage } from './pages/ProgramsPage';
+import { ProgramDetailPage } from './pages/ProgramDetailPage';
 import './App.css';
 
 /**
@@ -64,6 +67,31 @@ function App() {
             element={
               <RequireAuth>
                 <DashboardPage />
+              </RequireAuth>
+            }
+          />
+          {/* Этап 3: каталог упражнений и программы (docs/design.md §2) */}
+          <Route
+            path="/exercises"
+            element={
+              <RequireAuth>
+                <ExercisesPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/programs"
+            element={
+              <RequireAuth>
+                <ProgramsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/programs/:id"
+            element={
+              <RequireAuth>
+                <ProgramDetailPage />
               </RequireAuth>
             }
           />

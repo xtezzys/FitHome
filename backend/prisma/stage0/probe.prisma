@@ -1,0 +1,68 @@
+// Пробная схема Шага 0 — изолированная от основной prisma/schema.prisma.
+// Отражает ЦЕЛЕВОЕ состояние (после rebuild): колонки name_lower/difficulty NOT NULL,
+// user_id у probe_programs nullable. Используется только экспериментами Шага 0
+// и никогда не применяется к основной базе (см. docs/stage0-experiments.md).
+//
+// Изоляция: клиент генерируется в ./generated (не в node_modules/@prisma/client),
+// БД экспериментов — только в ./tmp (см. helpers.ts assertIsolated).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("PROBE_DATABASE_URL")
+}
+
+/// Проба Decimal-полей для E-2 (аналог targetWeight/weight)
+model ProbeDecimal {
+  id        Int      @id @default(autoincrement())
+  val       Decimal?
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("probe_decimals")
+}
+
+/// Аналог Exercise в ЦЕЛЕВОМ состоянии (после rebuild)
+model ProbeExercise {
+  id           Int    @id @default(autoincrement())
+  name         String
+  nameLower    String @map("name_lower")
+  difficulty   String
+  muscleGroups String @map("muscle_groups")
+
+  programExercises ProbeProgramExercise[]
+
+  @@map("probe_exercises")
+}
+
+/// Аналог Program в ЦЕЛЕВОМ состоянии (userId nullable — «готовая» программа)
+model ProbeProgram {
+  id       Int     @id @default(autoincrement())
+  userId   Int?    @map("user_id")
+  name     String
+  isActive Boolean @default(true) @map("is_active")
+
+  exercises ProbeProgramExercise[]
+
+  @@map("probe_programs")
+}
+
+/// Аналог ProgramExercise: FK Restrict на упражнение, Cascade на программу,
+/// unique (programId, ord) — точно как в реальной схеме
+model ProbeProgramExercise {
+  id           Int      @id @default(autoincrement())
+  programId    Int      @map("program_id")
+  exerciseId   Int      @map("exercise_id")
+  ord          Int
+  targetWeight Decimal? @map("target_weight")
+
+  program  ProbeProgram  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  exercise ProbeExercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@unique([programId, ord])
+  @@map("probe_program_exercises")
+}

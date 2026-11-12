@@ -1,0 +1,122 @@
+.catalog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.catalog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.catalog__title {
+  margin: 0;
+  font-size: var(--font-size-h1);
+}
+
+.catalog__notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-small);
+  color: var(--color-success);
+  background: rgba(74, 222, 128, 0.12);
+  border-radius: var(--radius-s);
+}
+
+.catalog__form-error,
+.catalog__error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-small);
+  color: var(--color-danger);
+  background: var(--color-danger-surface);
+  border-radius: var(--radius-s);
+}
+
+.catalog__error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.catalog__filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.catalog__filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.catalog__filter-label {
+  min-width: 88px;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.catalog__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.catalog__fieldset {
+  margin: 0;
+  padding: var(--space-2) 0;
+  border: none;
+}
+
+.catalog__fieldset legend {
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+  padding: 0;
+}
+
+.catalog__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.catalog__detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.catalog__detail-text {
+  margin: 0;
+  font-size: var(--font-size-base);
+}
+
+.catalog__detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ≥768 px: две колонки, фильтры компактнее */
+@media (min-width: 768px) {
+  .catalog__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .catalog__filter-label {
+    min-width: 110px;
+  }
+}
+
+/* ≥1024 px: три колонки */
+@media (min-width: 1024px) {
+  .catalog__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

@@ -1,0 +1,109 @@
+.programs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.programs__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.programs__title {
+  margin: 0;
+  font-size: var(--font-size-h1);
+}
+
+.programs__tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.programs__tab {
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.programs__tab:hover {
+  color: var(--color-text);
+}
+
+.programs__tab--active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.programs__notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-small);
+  color: var(--color-success);
+  background: rgba(74, 222, 128, 0.12);
+  border-radius: var(--radius-s);
+}
+
+.programs__error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-danger);
+  background: var(--color-danger-surface);
+  border-radius: var(--radius-s);
+}
+
+.programs__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.programs__form-error,
+.programs__form-error-text {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-small);
+  color: var(--color-danger);
+  background: var(--color-danger-surface);
+  border-radius: var(--radius-s);
+}
+
+.programs__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.programs__link {
+  text-decoration: none;
+}
+
+.programs__hint {
+  align-self: center;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 768px) {
+  .programs__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .programs__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

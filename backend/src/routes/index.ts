@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import * as authController from '../controllers/auth.controller.js';
 import * as userController from '../controllers/user.controller.js';
+import { exercisesRouter } from './exercises.routes.js';
+import { programsRouter } from './programs.routes.js';
 import { requireAuth } from '../middlewares/auth.middleware.js';
 
 /**
  * Корневой роутер /api.
- * На этапах 3–5 здесь регистрируются exercises, programs,
- * workouts, stats, settings — контракты в docs/api.md.
+ * На этапах 4–5 здесь регистрируются workouts, stats, settings —
+ * контракты в docs/api.md.
  */
 export const apiRouter = Router();
 
@@ -31,3 +33,9 @@ authRouter.get('/me', requireAuth, userController.getMe);
 authRouter.put('/me', requireAuth, userController.updateMe);
 
 apiRouter.use('/auth', authRouter);
+
+// /api/exercises — каталог упражнений (docs/api.md §3, этап 3)
+apiRouter.use('/exercises', exercisesRouter);
+
+// /api/programs — программы и состав (docs/api.md §4, этап 3)
+apiRouter.use('/programs', programsRouter);

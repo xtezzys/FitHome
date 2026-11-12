@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import './DashboardPage.css';
@@ -25,9 +26,17 @@ export function DashboardPage() {
             <>
               <h2>Привет, {user.name}!</h2>
               <p>
-                Вы вошли как <strong>{user.email}</strong>. Каталог упражнений, программы и
-                история тренировок появятся на следующих этапах.
+                Вы вошли как <strong>{user.email}</strong>. История тренировок и статистика
+                появятся на следующих этапах.
               </p>
+              <div className="dashboard__links">
+                <Link to="/exercises" className="dashboard__link">
+                  <Button>Упражнения</Button>
+                </Link>
+                <Link to="/programs" className="dashboard__link">
+                  <Button>Программы</Button>
+                </Link>
+              </div>
             </>
           ) : (
             <h2>Загрузка профиля…</h2>

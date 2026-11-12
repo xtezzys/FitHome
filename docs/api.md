@@ -124,7 +124,7 @@
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/api/exercises` | Список (фильтры: `?place=home&muscle=chest&search=отжим`) |
+| GET | `/api/exercises` | Список (фильтры: `?page&limit&place&muscle&difficulty&equipment&metric&search`) |
 | GET | `/api/exercises/:id` | Одно упражнение |
 | POST | `/api/exercises` | Создать персональное упражнение |
 | PUT | `/api/exercises/:id` | Изменить своё упражнение (общие — нельзя) |
@@ -132,11 +132,17 @@
 
 ### GET `/api/exercises`
 
+Фильтры: `place` (`home|outdoor|gym`), `muscle` (любое из значений, any-match),
+`difficulty` (`easy|medium|hard`), `equipment` (точное совпадение целого токена —
+CSV хранится в каноническом формате database.md §2.3), `metric`, `search` (поиск
+по `nameLower`, регистронезависим для кириллицы), `page`/`limit` (лимит ≤ 100).
+
 ```json
 // 200 OK
 { "data": [
   { "id": 1, "name": "Отжимания", "description": "Классические отжимания от пола",
     "place": "home", "metric": "reps", "muscleGroups": ["chest", "triceps"],
+    "difficulty": "easy", "equipment": [],
     "userId": null }
 ], "meta": { "page": 1, "limit": 20, "total": 34 } }
 ```
@@ -146,7 +152,8 @@
 ```json
 // Запрос — все поля обязательны, кроме description
 { "name": "Тяга резинки к поясу", "description": "Стоя, тяга к животу",
-  "place": "home", "metric": "reps", "muscleGroups": ["back", "biceps"] }
+  "place": "home", "metric": "reps", "muscleGroups": ["back", "biceps"],
+  "difficulty": "easy", "equipment": ["resistance_band"] }
 // 201 Created → объект упражнения с userId текущего пользователя
 // 409 CONFLICT — упражнение с таким именем уже есть у пользователя
 ```
@@ -155,14 +162,16 @@
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/api/programs` | Свои программы (`?isActive=true&place=gym`) |
-| GET | `/api/programs/:id` | Программа с составом (ProgramExercise + Exercise) |
+| GET | `/api/programs` | `?scope=mine` (по умолчанию) \| `ready` — каталог готовых; фильтры `?place&isActive&page&limit` |
+| GET | `/api/programs/:id` | Программа с составом (ProgramExercise + Exercise); готовая — доступна всем на чтение |
 | POST | `/api/programs` | Создать программу |
-| PUT | `/api/programs/:id` | Изменить название/описание/место |
-| DELETE | `/api/programs/:id` | Soft delete: `isActive = false` |
-| POST | `/api/programs/:id/exercises` | Добавить упражнение в программу |
-| PUT | `/api/programs/:id/exercises/:programExerciseId` | Изменить цели/порядок упражнения |
-| DELETE | `/api/programs/:id/exercises/:programExerciseId` | Убрать упражнение из программы |
+| PUT | `/api/programs/:id` | Изменить название/описание/место (только владелец) |
+| DELETE | `/api/programs/:id` | Soft delete: `isActive = false` (только владелец) |
+| POST | `/api/programs/:id/copy` | Клонировать готовую/свою программу в аккаунт (одна транзакция) |
+| POST | `/api/programs/:id/exercises` | Добавить упражнение (цели по метрике; разрешены общие и свои упражнения) |
+| PUT | `/api/programs/:id/exercises/:programExerciseId` | Изменить цели упражнения |
+| PUT | `/api/programs/:id/exercises/order` | Пакетная перестановка порядка: `{ "orders": [{ "programExerciseId": 11, "order": 2 }] }` |
+| DELETE | `/api/programs/:id/exercises/:programExerciseId` | Убрать упражнение из программы (+ нормализация order) |
 
 ### GET `/api/programs/:id`
 
@@ -282,10 +291,10 @@
 | 4 | POST | `/api/auth/refresh` | cookie | Этап 2 |
 | 5 | POST | `/api/auth/logout` | — | Этап 2 |
 | 6 | GET | `/api/auth/me` | JWT | Этап 2 |
-| 7–11 | GET/POST/PUT/DELETE | `/api/exercises…` | JWT | Этап 3 |
-| 12–19 | GET/POST/PUT/DELETE | `/api/programs…` | JWT | Этап 3 |
-| 20–24 | GET/POST/PUT/DELETE | `/api/workouts…` | JWT | Этап 4 |
-| 25–26 | GET | `/api/stats…` | JWT | Этап 4 |
-| 27–28 | GET/PUT | `/api/settings…` | JWT | Этап 5 |
+| 7–11 | GET/POST/PUT/DELETE | `/api/exercises…` (5 эндпоинтов) | JWT | Этап 3 |
+| 12–21 | GET/POST/PUT/DELETE | `/api/programs…` (10 эндпоинтов, включая copy и order) | JWT | Этап 3 |
+| 22–26 | GET/POST/PUT/DELETE | `/api/workouts…` | JWT | Этап 4 |
+| 27–28 | GET | `/api/stats…` | JWT | Этап 4 |
+| 29–30 | GET/PUT | `/api/settings…` | JWT | Этап 5 |
 
 Этапы реализации соответствуют плану в [architecture.md §9](architecture.md#9-план-развития-этапы-2).

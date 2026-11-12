@@ -66,10 +66,13 @@ model UserSettings {
 model Exercise {
   id           Int      @id @default(autoincrement())
   name         String
+  nameLower    String // название в нижнем регистре для кириллического поиска (JS toLowerCase, см. docs/stage0-experiments.md)
   description  String?
   place        String // "home" | "outdoor" | "gym"
   metric       String // "reps" | "reps_weight" | "time"
-  muscleGroups String // группы мышц через запятую, например "chest, triceps"
+  muscleGroups String // канонический CSV с ограничивающими запятыми: ",chest,triceps," — точное совпадение токенов в фильтрах
+  difficulty   String // "easy" | "medium" | "hard"
+  equipment    String? // канонический CSV инвентаря (",dumbbell,bench,") или null — без инвентаря
   userId       Int? // null — общее упражнение каталога
   createdAt    DateTime @default(now())
 
@@ -77,16 +80,16 @@ model Exercise {
   programExercise ProgramExercise[]
   workoutResults  WorkoutResult[]
 
-  @@unique([userId, name])
+  @@unique([userId, name]) // в SQLite NULL в составном ключе различим — идемпотентность общих упражнений обеспечивает seed (findFirst)
   @@index([place])
   @@index([userId])
   @@map("exercises")
 }
 
-/// Программа тренировок пользователя; удаление — soft delete через isActive (docs/database.md §2.4)
+/// Программа тренировок; userId = null — готовая общедоступная программа каталога (docs/database.md §2.4)
 model Program {
   id          Int      @id @default(autoincrement())
-  userId      Int
+  userId      Int? // null — готовая программа (read-only для всех); задан — программа владельца
   name        String
   description String?
   place       String // "home" | "outdoor" | "gym"
@@ -94,7 +97,7 @@ model Program {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises ProgramExercise[]
   workouts  Workout[]
 
