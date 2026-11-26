@@ -31,11 +31,12 @@ FitHome/
 │   ├── prisma/
 │   │   ├── schema.prisma
 │   │   ├── migrations/
-│   │   │   ├── 2026.../
-│   │   │   ├── 2026.../
-│   │   │   ├── 2026.../
-│   │   │   ├── 2026.../
-│   │   │   └── 2026.../
+│   │   │   ├── migration_1/
+│   │   │   ├── migration_2/
+│   │   │   ├── migration_3/
+│   │   │   ├── migration_4/
+│   │   │   ├── migration_5/
+│   │   │   └── migration_6_stage6_rest_sec/
 │   │   └── seed.ts
 │   │
 │   ├── src/
