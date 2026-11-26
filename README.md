@@ -16,8 +16,9 @@ FitHome — современное адаптивное веб-приложен�
 
 ## Структура проекта
 
+
+```text
 FitHome/
-│
 ├── README.md
 ├── .gitignore
 │
@@ -29,14 +30,8 @@ FitHome/
 │
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma
 │   │   ├── migrations/
-│   │   │   ├── migration_1/
-│   │   │   ├── migration_2/
-│   │   │   ├── migration_3/
-│   │   │   ├── migration_4/
-│   │   │   ├── migration_5/
-│   │   │   └── migration_6_stage6_rest_sec/
+│   │   ├── schema.prisma
 │   │   └── seed.ts
 │   │
 │   ├── src/
@@ -92,12 +87,12 @@ FitHome/
     │   │
     │   ├── components/
     │   ├── pages/
-    │   │   ├── Login
-    │   │   ├── Register
-    │   │   ├── Exercises
-    │   │   ├── Programs
-    │   │   ├── ProgramLibrary
-    │   │   └── ReceivedPrograms
+    │   │   ├── Login/
+    │   │   ├── Register/
+    │   │   ├── Exercises/
+    │   │   ├── Programs/
+    │   │   ├── ProgramLibrary/
+    │   │   └── ReceivedPrograms/
     │   │
     │   ├── types/
     │   │   ├── exercise.ts
@@ -110,6 +105,8 @@ FitHome/
     │
     ├── package.json
     └── vite.config.ts
+```
+
 
 ## Документация
 
