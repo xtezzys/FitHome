@@ -16,17 +16,97 @@ FitHome — современное адаптивное веб-приложен�
 
 ## Структура проекта
 
-```
+
+```text
 FitHome/
-├── docs/                  # Техническая документация
-│   ├── architecture.md    # Архитектура приложения
-│   ├── database.md        # Схема базы данных
-│   ├── api.md             # REST API эндпоинты
-│   ├── design.md          # Описание интерфейса
-│   └── testing.md         # План тестирования
-├── backend/               # API-сервер (Express + Prisma)
-└── frontend/              # SPA-клиент (React + Vite)
+├── README.md
+├── .gitignore
+│
+├── docs/
+│   ├── architecture.md
+│   ├── database.md
+│   ├── api.md
+│   └── design.md
+│
+├── backend/
+│   ├── prisma/
+│   │   ├── migrations/
+│   │   ├── schema.prisma
+│   │   └── seed.ts
+│   │
+│   ├── src/
+│   │   ├── controllers/
+│   │   │   ├── auth.controller.ts
+│   │   │   ├── exercise.controller.ts
+│   │   │   ├── program.controller.ts
+│   │   │   ├── workout.controller.ts
+│   │   │   ├── stats.controller.ts
+│   │   │   └── program-share.controller.ts
+│   │   │
+│   │   ├── routes/
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── exercises.routes.ts
+│   │   │   ├── programs.routes.ts
+│   │   │   ├── workouts.routes.ts
+│   │   │   ├── stats.routes.ts
+│   │   │   └── program-shares.routes.ts
+│   │   │
+│   │   ├── services/
+│   │   │   ├── auth.service.ts
+│   │   │   ├── exercise.service.ts
+│   │   │   ├── program.service.ts
+│   │   │   ├── workout.service.ts
+│   │   │   ├── stats.service.ts
+│   │   │   └── program-share.service.ts
+│   │   │
+│   │   ├── repositories/
+│   │   │   ├── exercise.repository.ts
+│   │   │   ├── program.repository.ts
+│   │   │   ├── workout.repository.ts
+│   │   │   ├── stats.repository.ts
+│   │   │   └── program-share.repository.ts
+│   │   │
+│   │   ├── middlewares/
+│   │   ├── types/
+│   │   ├── utils/
+│   │   ├── app.ts
+│   │   └── server.ts
+│   │
+│   ├── package.json
+│   └── tsconfig.json
+│
+└── frontend/
+    ├── src/
+    │   ├── api/
+    │   │   ├── client.ts
+    │   │   ├── auth.ts
+    │   │   ├── exercises.ts
+    │   │   ├── programs.ts
+    │   │   ├── workouts.ts
+    │   │   └── stats.ts
+    │   │
+    │   ├── components/
+    │   ├── pages/
+    │   │   ├── Login/
+    │   │   ├── Register/
+    │   │   ├── Exercises/
+    │   │   ├── Programs/
+    │   │   ├── ProgramLibrary/
+    │   │   └── ReceivedPrograms/
+    │   │
+    │   ├── types/
+    │   │   ├── exercise.ts
+    │   │   ├── program.ts
+    │   │   ├── workout.ts
+    │   │   └── stats.ts
+    │   │
+    │   ├── App.tsx
+    │   └── main.tsx
+    │
+    ├── package.json
+    └── vite.config.ts
 ```
+
 
 ## Документация
 
@@ -38,42 +118,4 @@ FitHome/
 4. [`docs/design.md`](docs/design.md) — структура интерфейса, адаптивность, UX-потоки.
 5. [`docs/testing.md`](docs/testing.md) — стратегия тестирования на Vitest.
 
-## Требования
 
-- Node.js >= 20
-- npm >= 10
-
-## Запуск
-
-### Backend
-
-```bash
-cd backend
-npm install
-cp .env.example .env         # настроить DATABASE_URL, JWT_SECRET
-npx prisma migrate dev       # создать и применить миграцию
-npm run dev                  # http://localhost:4000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev                  # http://localhost:5173
-```
-
-## Тесты
-
-```bash
-cd backend && npm test
-cd frontend && npm test
-```
-
-## Статус проекта
-
-Этап 1 — подготовка архитектуры и скелета проекта (выполнен).
-Этап 2 — авторизация и управление пользователями (выполнен): регистрация, вход/выход,
-JWT access + refresh с ротацией и отзывом сессий, httpOnly refresh-cookie, bcrypt,
-middleware защиты API, редактирование профиля, страницы Login/Register.
-Следующие этапы: CRUD-модули упражнений и программ, интерфейс планирования тренировок.
