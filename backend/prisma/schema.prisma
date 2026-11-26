@@ -1,4 +1,4 @@
-// Схема БД FitHome — 7 сущностей.
+// Схема БД FitHome — 8 сущностей (этап 4: добавлена WorkoutSet).
 // Каноническое описание полей и правил целостности: docs/database.md
 // Контракты API, работающие с этими сущностями: docs/api.md
 //
@@ -28,6 +28,8 @@ model User {
   programs      Program[]
   workouts      Workout[]
   refreshTokens RefreshToken[]
+  sharesSent     ProgramShare[] @relation("ProgramSharesFrom")
+  sharesReceived ProgramShare[] @relation("ProgramSharesTo")
 
   @@map("users")
 }
@@ -94,15 +96,39 @@ model Program {
   description String?
   place       String // "home" | "outdoor" | "gym"
   isActive    Boolean  @default(true)
+  isPublic    Boolean  @default(false) // добровольная публикация в общую библиотеку
+  publishedAt DateTime? // момент публикации; null — не опубликована
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises ProgramExercise[]
   workouts  Workout[]
+  shares    ProgramShare[]
 
   @@index([userId, isActive])
+  @@index([isPublic, isActive])
   @@map("programs")
+}
+
+/// Отправка программы конкретному пользователю (этап 5).
+/// Статусы: pending | saved | declined. Копия при сохранении независима.
+model ProgramShare {
+  id         Int      @id @default(autoincrement())
+  programId  Int
+  fromUserId Int
+  toUserId   Int
+  status     String   @default("pending") // pending | saved | declined
+  createdAt  DateTime @default(now())
+
+  program  Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  fromUser User    @relation("ProgramSharesFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User    @relation("ProgramSharesTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([toUserId, status])
+  @@index([fromUserId])
+  @@map("program_shares")
 }
 
 /// Упражнение в составе программы с целевыми нагрузками (docs/database.md §2.5)
@@ -115,49 +141,80 @@ model ProgramExercise {
   targetReps    Int? // для метрики "reps" и "reps_weight"
   targetWeight  Decimal? // для метрики "reps_weight"
   targetDuration Int? // сек, для метрики "time"
+  restSec       Int     @default(90) // перерыв между подходами, сек (0 — без перерыва)
 
-  program  Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  program        Program         @relation(fields: [programId], references: [id], onDelete: Cascade)
+  exercise       Exercise        @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  workoutResults WorkoutResult[] // результаты, скопированные из плана при старте тренировки (SetNull при удалении)
 
   @@unique([programId, order])
   @@index([exerciseId])
   @@map("program_exercises")
 }
 
-/// Выполненная тренировка; programId = null — свободная тренировка (docs/database.md §2.6)
+/// Тренировка: in_progress | completed | cancelled; programId = null — свободная (docs/database.md §2.6)
+/// Активная (in_progress) — максимум одна на пользователя: частичный уникальный индекс
+/// workouts_user_active_uq (userId) WHERE status = 'in_progress' создаётся в миграции stage4.
 model Workout {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   userId      Int
-  programId   Int?
+  programId   Int? // null — свободная тренировка; SetNull при удалении программы
+  programName String? // снапшот названия программы на момент старта (только сервер)
   place       String // "home" | "outdoor" | "gym"
-  performedAt DateTime @default(now())
+  status      String    @default("in_progress") // "in_progress" | "completed" | "cancelled"
+  revision    Int       @default(0) // CAS автосохранения и завершения (план этапа 4 v3 §4 п.2)
+  startedAt   DateTime  @default(now())
+  completedAt DateTime? // устанавливается только сервером при завершении
+  durationSec Int? // completedAt - startedAt, считает сервер
   notes       String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   program Program?        @relation(fields: [programId], references: [id], onDelete: SetNull)
   results WorkoutResult[]
 
-  @@index([userId, performedAt])
+  @@index([userId, startedAt]) // история и статистика
   @@map("workouts")
 }
 
 /// Результат одного упражнения в рамках тренировки (docs/database.md §2.7)
+/// Снапшоты exerciseName/exerciseMetric заполняет только сервер — история корректна
+/// после удаления/переименования упражнения (exerciseId → SetNull).
 model WorkoutResult {
-  id         Int      @id @default(autoincrement())
-  workoutId  Int
-  exerciseId Int
-  sets       Int
-  reps       Int? // для метрик "reps" и "reps_weight"
-  weight     Decimal? // для метрики "reps_weight"
-  duration   Int? // сек, для метрики "time"
-  notes      String?
-  createdAt  DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  workoutId         Int
+  exerciseId        Int? // null после удаления упражнения (SetNull)
+  programExerciseId Int? // элемент плана программы, из которого скопирован результат (SetNull)
+  exerciseName      String // снапшот названия упражнения
+  exerciseMetric    String // снапшот метрики: "reps" | "reps_weight" | "time"
+  order             Int // позиция в тренировке (с 1)
+  skipped           Boolean  @default(false) // упражнение пропущено целиком
+  notes             String?
+  createdAt         DateTime @default(now())
 
-  workout  Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  workout         Workout          @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise        Exercise?        @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
+  programExercise ProgramExercise? @relation(fields: [programExerciseId], references: [id], onDelete: SetNull)
+  sets            WorkoutSet[]
 
-  @@index([workoutId])
+  @@unique([workoutId, order]) // уникальность порядка упражнений в тренировке (план v3 §4 п.5)
   @@index([exerciseId])
   @@map("workout_results")
+}
+
+/// Отдельный подход в рамках результата упражнения (этап 4, план v3 §2)
+/// Заполненность reps/weight/duration определяется снапшотом exerciseMetric родителя.
+model WorkoutSet {
+  id              Int      @id @default(autoincrement())
+  workoutResultId Int
+  order           Int // номер подхода (с 1)
+  reps            Int? // для метрик "reps" и "reps_weight"
+  weight          Decimal? // для метрики "reps_weight"
+  duration        Int? // сек, для метрики "time"
+  skipped         Boolean  @default(false) // подход пропущен
+
+  workoutResult WorkoutResult @relation(fields: [workoutResultId], references: [id], onDelete: Cascade)
+
+  @@unique([workoutResultId, order]) // уникальность порядка подходов (план v3 §4 п.5)
+  @@map("workout_sets")
 }

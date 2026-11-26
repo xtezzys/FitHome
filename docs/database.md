@@ -108,7 +108,8 @@ trim, lowercase, пробел внутри токена → `_`, удалени�
 | `targetSets` | Int | not null, default 3 | Целевое число подходов |
 | `targetReps` | Int | nullable | Целевое число повторов |
 | `targetWeight` | Decimal | nullable | Целевая весовая нагрузка |
-| `targetDuration` | Int | nullable | Целевая длительность, сек (для метрики `time`) |
+| `targetDuration` | Int | nullable | Целевая длительность подхода, сек (для метрики `time`) |
+| `restSec` | Int | not null, default 90 | Перерыв между подходами, сек (`0` — без перерыва) |
 
 Индексы: `@@unique([programId, order])`, `@@index([exerciseId])`.
 

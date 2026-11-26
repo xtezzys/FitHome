@@ -27,9 +27,6 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@prisma/client": "^6.2.1",
     "bcryptjs": "^3.0.3",

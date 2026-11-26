@@ -5,7 +5,9 @@ import {
   parseCreateProgramDto,
   parseId,
   parseProgramListQuery,
+  parsePublicProgramListQuery,
   parseReorderDto,
+  parseShareProgramDto,
   parseUpdateProgramDto,
   parseUpdateProgramExerciseDto,
 } from '../middlewares/validate.js';
@@ -83,6 +85,56 @@ export const reorderExercises = asyncHandler(async (req: Request, res: Response)
   const dto = parseReorderDto(req.body);
   const program = await programService.reorderProgramExercises(req.userId as number, programId, dto);
   res.status(200).json(program);
+});
+
+// ─── Этап 5: публичная библиотека и отправка программ ───
+
+/** GET /api/programs/public — 200 + { data, meta } публичной библиотеки. */
+export const listPublic = asyncHandler(async (req: Request, res: Response) => {
+  const query = parsePublicProgramListQuery(req.query);
+  const result = await programService.listPublicPrograms(query);
+  res.status(200).json(result);
+});
+
+/** POST /api/programs/:id/share — 201 + созданная передача. */
+export const share = asyncHandler(async (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  const dto = parseShareProgramDto(req.body);
+  const created = await programService.shareProgram(req.userId as number, id, dto);
+  res.status(201).json(created);
+});
+
+/** GET /api/programs/shares/incoming — 200 + полученные программы. */
+export const incomingShares = asyncHandler(async (req: Request, res: Response) => {
+  const rows = await programService.listIncomingShares(req.userId as number);
+  res.status(200).json({ data: rows });
+});
+
+/** GET /api/programs/shares/outgoing — 200 + отправленные программы. */
+export const outgoingShares = asyncHandler(async (req: Request, res: Response) => {
+  const rows = await programService.listOutgoingShares(req.userId as number);
+  res.status(200).json({ data: rows });
+});
+
+/** GET /api/programs/shares/:shareId — 200 + полученная программа с составом. */
+export const getShare = asyncHandler(async (req: Request, res: Response) => {
+  const shareId = parseId(req.params.shareId);
+  const detail = await programService.getIncomingShare(req.userId as number, shareId);
+  res.status(200).json(detail);
+});
+
+/** POST /api/programs/shares/:shareId/save — 201 + независимая копия. */
+export const saveShare = asyncHandler(async (req: Request, res: Response) => {
+  const shareId = parseId(req.params.shareId);
+  const copy = await programService.saveSharedProgram(req.userId as number, shareId);
+  res.status(201).json(copy);
+});
+
+/** DELETE /api/programs/shares/:shareId — 204. */
+export const deleteShare = asyncHandler(async (req: Request, res: Response) => {
+  const shareId = parseId(req.params.shareId);
+  await programService.deleteIncomingShare(req.userId as number, shareId);
+  res.status(204).send();
 });
 
 /** DELETE /api/programs/:id/exercises/:programExerciseId — 204. */

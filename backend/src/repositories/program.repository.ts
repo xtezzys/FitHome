@@ -20,6 +20,8 @@ export interface UpdateProgramData {
   description?: string;
   place?: string;
   isActive?: boolean;
+  isPublic?: boolean;
+  publishedAt?: Date | null;
 }
 
 export interface CreateProgramExerciseData {
@@ -30,6 +32,7 @@ export interface CreateProgramExerciseData {
   targetReps?: number | null;
   targetWeight?: number | null;
   targetDuration?: number | null;
+  restSec?: number;
 }
 
 type TransactionClient = Prisma.TransactionClient;
@@ -49,11 +52,17 @@ const programInclude = {
     orderBy: { order: 'asc' as const },
     include: { exercise: true },
   },
+  user: { select: { name: true } },
 };
 
-export type ProgramRow = Prisma.ProgramGetPayload<{ include: { _count: { select: { exercises: true } } } }>;
+export type ProgramRow = Prisma.ProgramGetPayload<{
+  include: { _count: { select: { exercises: true } }; user: { select: { name: true } } };
+}>;
 export type ProgramWithExercises = Prisma.ProgramGetPayload<{
-  include: { exercises: { orderBy: { order: 'asc' }; include: { exercise: true } } };
+  include: {
+    exercises: { orderBy: { order: 'asc' }; include: { exercise: true } };
+    user: { select: { name: true } };
+  };
 }>;
 
 /** Список программ с пагинацией и количеством упражнений: [строки, всего]. */
@@ -66,13 +75,31 @@ export async function listPrograms(
     prisma.program.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      include: { _count: { select: { exercises: true } } },
+      include: { _count: { select: { exercises: true } }, user: { select: { name: true } } },
       skip: (page - 1) * limit,
       take: limit,
     }),
     prisma.program.count({ where }),
   ]);
   return [rows, total];
+}
+
+/**
+ * Публичная библиотека: только добровольно опубликованные личные программы.
+ * Поиск по названию выполняется в сервисе (кириллица без nameLower).
+ */
+export function findPublicPrograms(place?: string) {
+  return prisma.program.findMany({
+    where: {
+      isPublic: true,
+      isActive: true,
+      userId: { not: null },
+      ...(place ? { place } : {}),
+    },
+    orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+    take: 200,
+    include: { _count: { select: { exercises: true } }, user: { select: { name: true } } },
+  });
 }
 
 /** Программа с упорядоченным составом и упражнениями. */
@@ -131,6 +158,7 @@ export function updateProgramExercise(
     targetReps?: number | null;
     targetWeight?: number | null;
     targetDuration?: number | null;
+    restSec?: number;
   },
   tx?: TransactionClient,
 ) {
@@ -144,4 +172,63 @@ export function deleteProgramExercise(id: number, tx?: TransactionClient) {
 /** Изменение порядка одной строки; отрицательные значения — двухфазная перестановка. */
 export function updateProgramExerciseOrder(id: number, order: number, tx?: TransactionClient) {
   return client(tx).programExercise.update({ where: { id }, data: { order } });
+}
+
+// ─── Отправка программы пользователю (этап 5) ───
+
+export interface CreateProgramShareData {
+  programId: number;
+  fromUserId: number;
+  toUserId: number;
+}
+
+export function createProgramShare(data: CreateProgramShareData) {
+  return prisma.programShare.create({ data });
+}
+
+export function findPendingShare(programId: number, toUserId: number) {
+  return prisma.programShare.findFirst({
+    where: { programId, toUserId, status: 'pending' },
+  });
+}
+
+/** Детали передачи: программа с составом и автор — только для получателя (проверка в service). */
+export function findProgramShareById(id: number) {
+  return prisma.programShare.findUnique({
+    where: { id },
+    include: {
+      program: { include: programInclude },
+      fromUser: { select: { name: true } },
+    },
+  });
+}
+
+export function listIncomingShares(toUserId: number) {
+  return prisma.programShare.findMany({
+    where: { toUserId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: {
+      program: { select: { name: true } },
+      fromUser: { select: { name: true } },
+    },
+  });
+}
+
+export function listOutgoingShares(fromUserId: number) {
+  return prisma.programShare.findMany({
+    where: { fromUserId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: {
+      program: { select: { name: true } },
+      toUser: { select: { name: true } },
+    },
+  });
+}
+
+export function updateProgramShareStatus(id: number, status: string) {
+  return prisma.programShare.update({ where: { id }, data: { status } });
+}
+
+export function deleteProgramShare(id: number) {
+  return prisma.programShare.delete({ where: { id } });
 }

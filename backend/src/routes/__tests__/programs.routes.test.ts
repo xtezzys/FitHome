@@ -68,6 +68,7 @@ function makePe(exercise: ReturnType<typeof makeExercise>, overrides: Partial<Re
     targetReps: 15,
     targetWeight: null,
     targetDuration: null,
+    restSec: 90,
     exercise,
     ...overrides,
   };
@@ -81,8 +82,11 @@ function makeProgram(exercises: ReturnType<typeof makePe>[], overrides: Partial<
     description: null,
     place: 'home',
     isActive: true,
+    isPublic: false,
+    publishedAt: null,
     createdAt: now,
     updatedAt: now,
+    user: { name: 'Автор' },
     exercises,
     ...overrides,
   };
@@ -118,7 +122,9 @@ describe('GET /api/programs', () => {
   it('200: scope=mine — свои программы с exercisesCount', async () => {
     const program = {
       id: 50, userId: USER, name: 'Моя', description: null, place: 'home',
-      isActive: true, createdAt: now, updatedAt: now,
+      isActive: true, isPublic: false, publishedAt: null,
+      createdAt: now, updatedAt: now,
+      user: { name: 'Автор' },
       _count: { exercises: 3 },
     };
     repo.listPrograms.mockResolvedValue([[program], 1]);
@@ -157,6 +163,7 @@ describe('GET /api/programs/:id', () => {
       order: 1,
       targetSets: 3,
       targetWeight: null,
+      restSec: 90,
       exercise: { id: 100, muscleGroups: ['chest', 'triceps'] },
     });
   });
@@ -304,6 +311,23 @@ describe('POST /api/programs/:id/exercises', () => {
     const res = await request(app).post('/api/programs/50/exercises').set(...AUTH())
       .send({ exerciseId: 102, targetSets: 3, targetReps: 10 });
     expect(res.status).toBe(403);
+  });
+
+  it('201: перерыв между подходами передаётся в репозиторий', async () => {
+    const shared = makeExercise();
+    repo.findProgramById.mockResolvedValue(makeProgram([], { userId: USER }) as never);
+    exRepo.findExerciseById.mockResolvedValue(shared as never);
+    repo.findMaxProgramExerciseOrder.mockResolvedValue(0);
+    repo.findProgramExerciseByOrder.mockResolvedValue(null);
+    repo.createProgramExercise.mockResolvedValue(makePe(shared, { restSec: 45 }) as never);
+
+    const res = await request(app).post('/api/programs/50/exercises').set(...AUTH())
+      .send({ exerciseId: 100, targetSets: 3, targetReps: 10, restSec: 45 });
+    expect(res.status).toBe(201);
+    expect(res.body.restSec).toBe(45);
+    expect(repo.createProgramExercise).toHaveBeenCalledWith(
+      expect.objectContaining({ restSec: 45 }),
+    );
   });
 });
 

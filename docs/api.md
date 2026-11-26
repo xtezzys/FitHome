@@ -183,7 +183,7 @@ CSV хранится в каноническом формате database.md §2.
   "place": "home", "isActive": true, "userId": 1,
   "exercises": [
     { "programExerciseId": 11, "order": 1, "targetSets": 3, "targetReps": 15,
-      "targetWeight": null, "targetDuration": null,
+      "targetWeight": null, "targetDuration": null, "restSec": 90,
       "exercise": { "id": 1, "name": "Отжимания", "metric": "reps", "place": "home",
                     "muscleGroups": ["chest", "triceps"], "userId": null } }
   ]
@@ -195,8 +195,9 @@ CSV хранится в каноническом формате database.md §2.
 ### POST `/api/programs/:id/exercises`
 
 ```json
-// Запрос
-{ "exerciseId": 1, "order": 2, "targetSets": 3, "targetReps": 15, "targetWeight": null, "targetDuration": null }
+// Запрос (restSec необязателен: 0–3600, по умолчанию 90)
+{ "exerciseId": 1, "order": 2, "targetSets": 3, "targetReps": 15,
+  "targetWeight": null, "targetDuration": null, "restSec": 90 }
 // 201 Created → объект ProgramExercise
 // 400 VALIDATION_ERROR — order занят или не соответствует метрике упражнения (database.md §3)
 ```

@@ -68,6 +68,7 @@ interface ProgramSeed {
     targetReps?: number;
     targetWeight?: number;
     targetDuration?: number;
+    restSec?: number; // перерыв между подходами, сек (0 — без перерыва)
   }>;
 }
 
@@ -77,11 +78,11 @@ const PROGRAMS: ProgramSeed[] = [
     description: 'Круговая программа с собственным весом на 4 недели, 3 тренировки в неделю',
     place: 'home',
     items: [
-      { exercise: 'Отжимания', targetSets: 3, targetReps: 15 },
-      { exercise: 'Приседания', targetSets: 3, targetReps: 20 },
-      { exercise: 'Выпады', targetSets: 3, targetReps: 12 },
-      { exercise: 'Планка', targetSets: 3, targetDuration: 40 },
-      { exercise: 'Скручивания', targetSets: 3, targetReps: 20 },
+      { exercise: 'Отжимания', targetSets: 3, targetReps: 15, restSec: 90 },
+      { exercise: 'Приседания', targetSets: 3, targetReps: 20, restSec: 90 },
+      { exercise: 'Выпады', targetSets: 3, targetReps: 12, restSec: 90 },
+      { exercise: 'Планка', targetSets: 3, targetDuration: 40, restSec: 60 },
+      { exercise: 'Скручивания', targetSets: 3, targetReps: 20, restSec: 60 },
     ],
   },
   {
@@ -89,11 +90,11 @@ const PROGRAMS: ProgramSeed[] = [
     description: 'Короткая зарядка на 15–20 минут для начала дня',
     place: 'home',
     items: [
-      { exercise: 'Скакалка', targetSets: 1, targetDuration: 300 },
-      { exercise: 'Берпи', targetSets: 3, targetDuration: 30 },
-      { exercise: 'Отжимания', targetSets: 3, targetReps: 12 },
-      { exercise: 'Планка боковая', targetSets: 2, targetDuration: 30 },
-      { exercise: 'Ягодичный мостик', targetSets: 3, targetReps: 15 },
+      { exercise: 'Скакалка', targetSets: 1, targetDuration: 300, restSec: 0 },
+      { exercise: 'Берпи', targetSets: 3, targetDuration: 30, restSec: 30 },
+      { exercise: 'Отжимания', targetSets: 3, targetReps: 12, restSec: 60 },
+      { exercise: 'Планка боковая', targetSets: 2, targetDuration: 30, restSec: 45 },
+      { exercise: 'Ягодичный мостик', targetSets: 3, targetReps: 15, restSec: 60 },
     ],
   },
   {
@@ -101,10 +102,10 @@ const PROGRAMS: ProgramSeed[] = [
     description: 'Комбинированная уличная тренировка: бег и работа на перекладине',
     place: 'outdoor',
     items: [
-      { exercise: 'Бег', targetSets: 1, targetDuration: 1200 },
-      { exercise: 'Подтягивания', targetSets: 3, targetReps: 8 },
-      { exercise: 'Отжимания на брусьях', targetSets: 3, targetReps: 12 },
-      { exercise: 'Приседания с выпрыгиванием', targetSets: 3, targetReps: 15 },
+      { exercise: 'Бег', targetSets: 1, targetDuration: 1200, restSec: 0 },
+      { exercise: 'Подтягивания', targetSets: 3, targetReps: 8, restSec: 90 },
+      { exercise: 'Отжимания на брусьях', targetSets: 3, targetReps: 12, restSec: 90 },
+      { exercise: 'Приседания с выпрыгиванием', targetSets: 3, targetReps: 15, restSec: 60 },
     ],
   },
   {
@@ -112,11 +113,11 @@ const PROGRAMS: ProgramSeed[] = [
     description: 'Базовая тренировка на всё тело с весовыми нагрузками',
     place: 'gym',
     items: [
-      { exercise: 'Приседания со штангой', targetSets: 4, targetReps: 8, targetWeight: 40 },
-      { exercise: 'Жим гантелей лёжа', targetSets: 3, targetReps: 10, targetWeight: 12 },
-      { exercise: 'Тяга верхнего блока', targetSets: 3, targetReps: 12, targetWeight: 25 },
-      { exercise: 'Подъём гантелей на бицепс', targetSets: 3, targetReps: 12, targetWeight: 8 },
-      { exercise: 'Беговая дорожка', targetSets: 1, targetDuration: 900 },
+      { exercise: 'Приседания со штангой', targetSets: 4, targetReps: 8, targetWeight: 40, restSec: 120 },
+      { exercise: 'Жим гантелей лёжа', targetSets: 3, targetReps: 10, targetWeight: 12, restSec: 90 },
+      { exercise: 'Тяга верхнего блока', targetSets: 3, targetReps: 12, targetWeight: 25, restSec: 90 },
+      { exercise: 'Подъём гантелей на бицепс', targetSets: 3, targetReps: 12, targetWeight: 8, restSec: 60 },
+      { exercise: 'Беговая дорожка', targetSets: 1, targetDuration: 900, restSec: 0 },
     ],
   },
 ];
@@ -176,6 +177,7 @@ export async function runSeed(datasourceUrl: string): Promise<void> {
                 targetReps: item.targetReps ?? null,
                 targetWeight: item.targetWeight ?? null,
                 targetDuration: item.targetDuration ?? null,
+                restSec: item.restSec ?? 90,
               })),
             },
           },
@@ -203,6 +205,7 @@ export async function runSeed(datasourceUrl: string): Promise<void> {
             targetReps: item.targetReps ?? null,
             targetWeight: item.targetWeight ?? null,
             targetDuration: item.targetDuration ?? null,
+            restSec: item.restSec ?? 90,
           },
         });
         compositionAdded += 1;

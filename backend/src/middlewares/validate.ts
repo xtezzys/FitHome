@@ -12,6 +12,17 @@ import type {
   AddProgramExerciseDto,
   UpdateProgramExerciseDto,
   ReorderDto,
+  PublicProgramListQuery,
+  ShareProgramDto,
+  StartWorkoutDto,
+  SaveWorkoutSetDto,
+  SaveWorkoutResultDto,
+  SaveWorkoutResultsDto,
+  CompleteWorkoutDto,
+  UpdateWorkoutNotesDto,
+  WorkoutListQuery,
+  StatsSummaryQuery,
+  ExerciseStatsQuery,
 } from '../types/dto.js';
 import { canonToken } from '../lib/normalize.js';
 
@@ -50,8 +61,16 @@ const TARGET_SETS_MAX = 20;
 const TARGET_REPS_MAX = 1000;
 const TARGET_WEIGHT_MAX = 1000;
 const TARGET_DURATION_MAX = 6 * 3600; // сек, до 6 часов
+const TARGET_REST_MAX = 3600; // сек, перерыв между подходами — до 1 часа
 const SEARCH_MAX = 100;
 const LIMIT_MAX = 100;
+
+// Этап 4: лимиты тренировок (docs/api.md §5) — используются только парсерами этого файла.
+const RESULTS_MAX = 50;
+const SETS_MAX = 20;
+const NOTES_MAX = 2000;
+/** Максимальное значение Prisma Int. */
+const REVISION_MAX = 2147483647;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -163,6 +182,44 @@ function optionalBool(raw: unknown, field: string): boolean | undefined {
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   throw new AppError('VALIDATION_ERROR', `Параметр "${field}" должен быть "true" или "false"`);
+}
+
+// ─── Этап 4: вспомогательные функции тренировок (docs/api.md §5) ───
+
+/** Целое от 0 до max включительно (число или числовая строка); 0 разрешён — в отличие от parsePositiveInt. */
+function parseNonNegativeInt(raw: unknown, field: string, max?: number): number {
+  if (typeof raw === 'string' && raw.trim() === '') {
+    throw new AppError('VALIDATION_ERROR', `Поле "${field}" должно быть неотрицательным целым`);
+  }
+  const value = typeof raw === 'string' ? Number(raw) : raw;
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    !Number.isFinite(value) ||
+    (max !== undefined && value > max)
+  ) {
+    const range = max !== undefined ? `от 0 до ${max}` : 'неотрицательным целым';
+    throw new AppError('VALIDATION_ERROR', `Поле "${field}" должно быть ${range}`);
+  }
+  return value;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Дата YYYY-MM-DD: формат и реальное календарное существование (2026-02-30 отсекается).
+ * Проверка через UTC и обратное сравнение с исходной строкой.
+ */
+function parseIsoDate(raw: unknown, field: string): string {
+  if (typeof raw !== 'string' || !DATE_RE.test(raw)) {
+    throw new AppError('VALIDATION_ERROR', `Параметр "${field}" должен быть датой в формате YYYY-MM-DD`);
+  }
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw) {
+    throw new AppError('VALIDATION_ERROR', `Параметр "${field}" должен быть существующей датой`);
+  }
+  return raw;
 }
 
 /** Токены muscle/equipment: CSV-строка → канонические токены из словаря. */
@@ -364,10 +421,44 @@ export function parseUpdateProgramDto(body: unknown): UpdateProgramDto {
   }
   dto.description = parseOptionalDescription(body.description);
   if (body.place !== undefined) dto.place = optionalEnum(body.place, 'place', PLACES);
+  if (body.isPublic !== undefined) {
+    if (typeof body.isPublic !== 'boolean') {
+      throw new AppError('VALIDATION_ERROR', 'Поле "isPublic" должно быть true или false');
+    }
+    dto.isPublic = body.isPublic;
+  }
   if (Object.keys(dto).length === 0) {
     throw new AppError('VALIDATION_ERROR', 'Передайте хотя бы одно поле для обновления');
   }
   return dto;
+}
+
+// ─── Этап 5: публичная библиотека и отправка программы ───
+
+/** GET /api/programs/public — пагинация, фильтр по месту, поиск по названию. */
+export function parsePublicProgramListQuery(query: unknown): PublicProgramListQuery {
+  if (!isRecordOfQuery(query)) {
+    throw new AppError('VALIDATION_ERROR', 'Некорректные query-параметры');
+  }
+  const rawSearch = query.search === undefined ? undefined : String(query.search).trim();
+  return {
+    page: parsePositiveInt(query.page ?? '1', 'page'),
+    limit: parsePositiveInt(query.limit ?? '20', 'limit', LIMIT_MAX),
+    place: optionalEnum(query.place, 'place', PLACES),
+    search: rawSearch ? rawSearch.slice(0, SEARCH_MAX) : undefined,
+  };
+}
+
+/** POST /api/programs/:id/share — email получателя. */
+export function parseShareProgramDto(body: unknown): ShareProgramDto {
+  if (!isRecord(body)) {
+    throw new AppError('VALIDATION_ERROR', 'Тело запроса должно быть JSON-объектом');
+  }
+  const email = requireString(body, 'email').trim().toLowerCase();
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    throw new AppError('VALIDATION_ERROR', 'Некорректный email');
+  }
+  return { email };
 }
 
 /** POST /api/programs/:id/exercises (docs/api.md §4). */
@@ -383,6 +474,8 @@ export function parseAddProgramExerciseDto(body: unknown): AddProgramExerciseDto
     targetReps: parseOptionalTargetInt(body.targetReps, 'targetReps', TARGET_REPS_MAX),
     targetWeight: parseOptionalTargetWeight(body.targetWeight),
     targetDuration: parseOptionalTargetInt(body.targetDuration, 'targetDuration', TARGET_DURATION_MAX),
+    restSec:
+      body.restSec === undefined ? undefined : parseNonNegativeInt(body.restSec, 'restSec', TARGET_REST_MAX),
     order: body.order === undefined ? undefined : parsePositiveInt(body.order, 'order'),
   };
 }
@@ -402,6 +495,9 @@ export function parseUpdateProgramExerciseDto(body: unknown): UpdateProgramExerc
   dto.targetReps = parseOptionalTargetInt(body.targetReps, 'targetReps', TARGET_REPS_MAX);
   dto.targetWeight = parseOptionalTargetWeight(body.targetWeight);
   dto.targetDuration = parseOptionalTargetInt(body.targetDuration, 'targetDuration', TARGET_DURATION_MAX);
+  if (body.restSec !== undefined) {
+    dto.restSec = parseNonNegativeInt(body.restSec, 'restSec', TARGET_REST_MAX);
+  }
   if (Object.keys(dto).length === 0) {
     throw new AppError('VALIDATION_ERROR', 'Передайте хотя бы одно поле для обновления');
   }
@@ -423,4 +519,187 @@ export function parseReorderDto(body: unknown): ReorderDto {
     };
   });
   return { orders };
+}
+
+// ─── Этап 4: body/query тренировок (docs/api.md §5) ───
+
+/** POST /api/workouts — начало тренировки; без programId — свободная (docs/api.md §5). */
+export function parseStartWorkoutDto(body: unknown): StartWorkoutDto {
+  if (!isRecord(body)) {
+    throw new AppError('VALIDATION_ERROR', 'Тело запроса должно быть JSON-объектом');
+  }
+  const place = optionalEnum(body.place, 'place', PLACES);
+  if (place === undefined) {
+    throw new AppError('VALIDATION_ERROR', `Поле "place" должно быть одним из: ${PLACES.join(', ')}`);
+  }
+  const dto: StartWorkoutDto = { place };
+  if (body.programId !== undefined) {
+    dto.programId = parsePositiveInt(body.programId, 'programId');
+  }
+  return dto;
+}
+
+/** Boolean в body: строго true/false (строки отклоняются). */
+function parseBodyBoolean(raw: unknown, field: string): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === true) return true;
+  if (raw === false) return false;
+  throw new AppError('VALIDATION_ERROR', `Поле "${field}" должно быть true или false`);
+}
+
+/** Заметка: строка до NOTES_MAX (пустая → null) или null. */
+function parseOptionalNotes(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== 'string' || raw.length > NOTES_MAX) {
+    throw new AppError('VALIDATION_ERROR', `Поле "notes" должно быть строкой до ${NOTES_MAX} символов или null`);
+  }
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/** Подход в составе результата; skipped=true допускает только пустые значения полей. */
+function parseSaveWorkoutSetDto(raw: unknown): SaveWorkoutSetDto {
+  if (!isRecord(raw)) {
+    throw new AppError('VALIDATION_ERROR', 'Элементы "sets" должны быть объектами { order, reps?, weight?, duration?, skipped? }');
+  }
+  const order = parsePositiveInt(raw.order, 'order', SETS_MAX);
+  const skipped = parseBodyBoolean(raw.skipped, 'skipped');
+  const reps = parseOptionalTargetInt(raw.reps, 'reps', TARGET_REPS_MAX);
+  const weight = parseOptionalTargetWeight(raw.weight);
+  const duration = parseOptionalTargetInt(raw.duration, 'duration', TARGET_DURATION_MAX);
+  const hasValue = (v: number | null | undefined) => v !== undefined && v !== null;
+  if (skipped === true && (hasValue(reps) || hasValue(weight) || hasValue(duration))) {
+    throw new AppError('VALIDATION_ERROR', 'Пропущенный подход (skipped=true) допускает только отсутствие или null в reps/weight/duration');
+  }
+  return { order, skipped, reps, weight, duration };
+}
+
+/** PUT /api/workouts/:id/results — автосохранение: полная замена результатов и подходов (docs/api.md §5). */
+export function parseSaveResultsDto(body: unknown): SaveWorkoutResultsDto {
+  if (!isRecord(body)) {
+    throw new AppError('VALIDATION_ERROR', 'Тело запроса должно быть JSON-объектом');
+  }
+  const revision = parseNonNegativeInt(body.revision, 'revision', REVISION_MAX);
+  if (!Array.isArray(body.results) || body.results.length > RESULTS_MAX) {
+    throw new AppError('VALIDATION_ERROR', `Поле "results" должно быть массивом (до ${RESULTS_MAX} элементов)`);
+  }
+  const resultOrders: number[] = [];
+  const results = body.results.map((raw) => {
+    if (!isRecord(raw)) {
+      throw new AppError('VALIDATION_ERROR', 'Элементы "results" должны быть объектами { order, sets, programExerciseId?/exerciseId?, skipped?, notes? }');
+    }
+    const order = parsePositiveInt(raw.order, 'order', RESULTS_MAX);
+    resultOrders.push(order);
+    const skipped = parseBodyBoolean(raw.skipped, 'skipped');
+    const notes = parseOptionalNotes(raw.notes);
+    // Ровно один идентификатор: programExerciseId (план программы) или exerciseId (каталог)
+    const hasProgramExerciseId = raw.programExerciseId !== undefined;
+    const hasExerciseId = raw.exerciseId !== undefined;
+    if (hasProgramExerciseId === hasExerciseId) {
+      throw new AppError('VALIDATION_ERROR', 'Результат должен содержать ровно один идентификатор: programExerciseId или exerciseId');
+    }
+    if (!Array.isArray(raw.sets) || raw.sets.length > SETS_MAX) {
+      throw new AppError('VALIDATION_ERROR', `Поле "sets" должно быть массивом (до ${SETS_MAX} подходов)`);
+    }
+    if (skipped === true && raw.sets.length > 0) {
+      throw new AppError('VALIDATION_ERROR', 'Пропущенный результат (skipped=true) допускает только пустой массив "sets"');
+    }
+    const setOrders: number[] = [];
+    const sets = raw.sets.map((s) => {
+      const set = parseSaveWorkoutSetDto(s);
+      setOrders.push(set.order);
+      return set;
+    });
+    if (new Set(setOrders).size !== setOrders.length) {
+      throw new AppError('VALIDATION_ERROR', 'Поле "order" подходов должно быть уникальным');
+    }
+    const dto: SaveWorkoutResultDto = { order, skipped, notes: notes ?? null, sets };
+    if (hasProgramExerciseId) {
+      dto.programExerciseId = parsePositiveInt(raw.programExerciseId, 'programExerciseId');
+    } else {
+      dto.exerciseId = parsePositiveInt(raw.exerciseId, 'exerciseId');
+    }
+    return dto;
+  });
+  if (new Set(resultOrders).size !== resultOrders.length) {
+    throw new AppError('VALIDATION_ERROR', 'Поле "order" результатов должно быть уникальным');
+  }
+  return { revision, results };
+}
+
+/** POST /api/workouts/:id/complete — завершение; revision для CAS (docs/api.md §5). */
+export function parseCompleteWorkoutDto(body: unknown): CompleteWorkoutDto {
+  if (!isRecord(body)) {
+    throw new AppError('VALIDATION_ERROR', 'Тело запроса должно быть JSON-объектом');
+  }
+  return { revision: parseNonNegativeInt(body.revision, 'revision', REVISION_MAX) };
+}
+
+/** PUT /api/workouts/:id — заметки; notes обязательно: строка до NOTES_MAX или null (docs/api.md §5). */
+export function parseUpdateWorkoutNotesDto(body: unknown): UpdateWorkoutNotesDto {
+  if (!isRecord(body)) {
+    throw new AppError('VALIDATION_ERROR', 'Тело запроса должно быть JSON-объектом');
+  }
+  if (!('notes' in body)) {
+    throw new AppError('VALIDATION_ERROR', 'Поле "notes" обязательно');
+  }
+  const notes = parseOptionalNotes(body.notes);
+  if (notes === undefined) {
+    throw new AppError('VALIDATION_ERROR', `Поле "notes" должно быть строкой до ${NOTES_MAX} символов или null`);
+  }
+  return { notes };
+}
+
+/** GET /api/workouts — query-параметры истории (docs/api.md §5). */
+export function parseWorkoutListQuery(query: unknown): WorkoutListQuery {
+  if (!isRecordOfQuery(query)) {
+    throw new AppError('VALIDATION_ERROR', 'Некорректные query-параметры');
+  }
+  const from = query.from === undefined ? undefined : parseIsoDate(query.from, 'from');
+  const to = query.to === undefined ? undefined : parseIsoDate(query.to, 'to');
+  if (from !== undefined && to !== undefined && from > to) {
+    throw new AppError('VALIDATION_ERROR', 'Параметр "from" не может быть позже "to"');
+  }
+  return {
+    page: parsePositiveInt(query.page ?? '1', 'page'),
+    limit: parsePositiveInt(query.limit ?? '20', 'limit', LIMIT_MAX),
+    place: optionalEnum(query.place, 'place', PLACES),
+    from,
+    to,
+  };
+}
+
+// ─── Этап 4.4: query-параметры статистики (docs/api.md §6) ───
+
+/** Лимит точек истории упражнения по умолчанию. */
+const STATS_LIMIT_DEFAULT = 50;
+
+/** Диапазон дат статистики: YYYY-MM-DD (UTC), from <= to; to включительно. */
+function parseStatsDateRange(query: Record<string, unknown>): { from?: string; to?: string } {
+  const from = query.from === undefined ? undefined : parseIsoDate(query.from, 'from');
+  const to = query.to === undefined ? undefined : parseIsoDate(query.to, 'to');
+  if (from !== undefined && to !== undefined && from > to) {
+    throw new AppError('VALIDATION_ERROR', 'Параметр "from" не может быть позже "to"');
+  }
+  return { from, to };
+}
+
+/** GET /api/stats/summary — период from/to (YYYY-MM-DD UTC). */
+export function parseStatsSummaryQuery(query: unknown): StatsSummaryQuery {
+  if (!isRecordOfQuery(query)) {
+    throw new AppError('VALIDATION_ERROR', 'Некорректные query-параметры');
+  }
+  return parseStatsDateRange(query);
+}
+
+/** GET /api/stats/exercises/:exerciseId — период и limit (1..100, default 50). */
+export function parseExerciseStatsQuery(query: unknown): ExerciseStatsQuery {
+  if (!isRecordOfQuery(query)) {
+    throw new AppError('VALIDATION_ERROR', 'Некорректные query-параметры');
+  }
+  return {
+    ...parseStatsDateRange(query),
+    limit: parsePositiveInt(query.limit ?? STATS_LIMIT_DEFAULT, 'limit', LIMIT_MAX),
+  };
 }

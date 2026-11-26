@@ -9,9 +9,11 @@ import { TextField } from '../components/TextField';
 import { Spinner } from '../components/Spinner';
 import {
   addProgramExercise,
+  copyProgram,
   getProgram,
   removeProgramExercise,
   reorderProgramExercises,
+  shareProgram,
   updateProgram,
   updateProgramExercise,
 } from '../api/programs';
@@ -20,6 +22,7 @@ import type { Exercise, Paginated } from '../types/exercise';
 import type { Program, ProgramInput } from '../types/program';
 import { METRIC_LABELS, PLACE_LABELS, formatTargets, label } from '../lib/labels';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useAuth } from '../context/AuthContext';
 import './ProgramDetailPage.css';
 
 /**
@@ -41,6 +44,7 @@ function errorMessage(err: unknown): string {
 export function ProgramDetailPage() {
   const { id } = useParams();
   const programId = Number(id);
+  const { user } = useAuth();
 
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
@@ -71,13 +75,27 @@ export function ProgramDetailPage() {
     targetReps: number | null;
     targetWeight: number | null;
     targetDuration: number | null;
-  }>({ targetSets: 3, targetReps: null, targetWeight: null, targetDuration: null });
+    restSec: number;
+  }>({ targetSets: 3, targetReps: null, targetWeight: null, targetDuration: null, restSec: 90 });
   const [rowError, setRowError] = useState<string | null>(null);
   const [rowBusy, setRowBusy] = useState(false);
 
   // Удаление строки состава
   const [deletingPeId, setDeletingPeId] = useState<number | null>(null);
   const [reorderBusy, setReorderBusy] = useState(false);
+
+  // Этап 5: публикация, отправка, сохранение публичной копии
+  const [publishing, setPublishing] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [sharingBusy, setSharingBusy] = useState(false);
+  const [savingCopy, setSavingCopy] = useState(false);
+
+  const isOwner =
+    state.status === 'ready' &&
+    state.program.userId !== null &&
+    state.program.userId === user?.id;
 
   const load = useCallback(async () => {
     if (!Number.isInteger(programId) || programId < 1) {
@@ -131,6 +149,47 @@ export function ProgramDetailPage() {
     }
   };
 
+  const togglePublic = async () => {
+    if (state.status !== 'ready') return;
+    setPublishing(true);
+    try {
+      await updateProgram(programId, { isPublic: !state.program.isPublic });
+      setNotice(state.program.isPublic ? 'Программа снята с публикации' : 'Программа опубликована');
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setNotice(errorMessage(err));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const submitShare = async () => {
+    setSharingBusy(true);
+    setShareError(null);
+    try {
+      await shareProgram(programId, shareEmail.trim());
+      setSharing(false);
+      setShareEmail('');
+      setNotice('Программа отправлена');
+    } catch (err) {
+      setShareError(errorMessage(err));
+    } finally {
+      setSharingBusy(false);
+    }
+  };
+
+  const savePublicCopy = async () => {
+    setSavingCopy(true);
+    try {
+      const copy = await copyProgram(programId);
+      setNotice(`Программа сохранена: «${copy.name}»`);
+    } catch (err) {
+      setNotice(errorMessage(err));
+    } finally {
+      setSavingCopy(false);
+    }
+  };
+
   const addFromCatalog = async (exercise: Exercise) => {
     setPickerBusyId(exercise.id);
     setPickerError(null);
@@ -160,6 +219,7 @@ export function ProgramDetailPage() {
     targetReps: number | null;
     targetWeight: number | null;
     targetDuration: number | null;
+    restSec: number;
   }) => {
     setRowError(null);
     setEditingPeId(pe.programExerciseId);
@@ -168,6 +228,7 @@ export function ProgramDetailPage() {
       targetReps: pe.targetReps,
       targetWeight: pe.targetWeight,
       targetDuration: pe.targetDuration,
+      restSec: pe.restSec,
     });
   };
 
@@ -252,12 +313,34 @@ export function ProgramDetailPage() {
               <h1 className="constructor__title">{state.program.name}</h1>
               <span className="constructor__place">{label(PLACE_LABELS, state.program.place)}</span>
             </div>
+
+            {isOwner && (
+              <div className="programs__actions">
+                <Button variant="secondary" onClick={() => void togglePublic()} loading={publishing}>
+                  {state.program.isPublic ? 'Снять с публикации' : 'Опубликовать'}
+                </Button>
+                <Button variant="secondary" onClick={() => setSharing(true)}>
+                  Поделиться
+                </Button>
+                {state.program.isPublic && (
+                  <span className="programs__hint">Программа в публичной библиотеке</span>
+                )}
+              </div>
+            )}
+            {!isOwner && (
+              <p className="programs__hint">
+                Публичная программа автора {state.program.authorName ?? '—'}
+              </p>
+            )}
+
             {notice && (
               <p className="constructor__notice" role="status">
                 {notice}
               </p>
             )}
 
+            {isOwner && (
+              <>
             <section className="constructor__card" aria-label="Параметры программы">
               {headerError && (
                 <p className="constructor__error-text" role="alert">
@@ -414,6 +497,21 @@ export function ProgramDetailPage() {
                               />
                             </label>
                           )}
+                          <label className="constructor__target-field">
+                            Перерыв, сек
+                            <input
+                              type="number"
+                              min={0}
+                              max={3600}
+                              value={targetDraft.restSec}
+                              onChange={(event) =>
+                                setTargetDraft({
+                                  ...targetDraft,
+                                  restSec: Number(event.target.value),
+                                })
+                              }
+                            />
+                          </label>
                           <div className="constructor__targets-actions">
                             <Button onClick={() => void saveTargets(pe.programExerciseId, metric)} loading={rowBusy}>
                               Сохранить
@@ -429,6 +527,36 @@ export function ProgramDetailPage() {
                 })}
               </ul>
             </section>
+              </>
+            )}
+
+            {!isOwner && (
+              <section className="constructor__card" aria-label="Публичная программа">
+                {state.program.description && <p>{state.program.description}</p>}
+                {!state.program.exercises || state.program.exercises.length === 0 ? (
+                  <EmptyState title="В программе нет упражнений" />
+                ) : (
+                  <ul className="constructor__list">
+                    {state.program.exercises.map((pe) => (
+                      <li key={pe.programExerciseId} className="constructor__item">
+                        <div className="constructor__item-main">
+                          <span className="constructor__item-order">{pe.order}</span>
+                          <div className="constructor__item-info">
+                            <span className="constructor__item-name">{pe.exercise.name}</span>
+                            <span className="constructor__item-targets">
+                              {label(METRIC_LABELS, pe.exercise.metric)} · {formatTargets(pe)}
+                            </span>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button onClick={() => void savePublicCopy()} loading={savingCopy}>
+                  Сохранить к себе
+                </Button>
+              </section>
+            )}
           </>
         )}
       </div>
@@ -479,6 +607,31 @@ export function ProgramDetailPage() {
               </Button>
               <Button variant="danger" onClick={() => void confirmDeletePe()} loading={rowBusy}>
                 Удалить
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {sharing && (
+        <Modal title="Отправить программу" onClose={() => setSharing(false)}>
+          <div className="modal__body">
+            {shareError && (
+              <p className="constructor__error-text" role="alert">
+                {shareError}
+              </p>
+            )}
+            <TextField
+              label="Email получателя"
+              value={shareEmail}
+              onChange={(event) => setShareEmail(event.target.value)}
+            />
+            <div className="programs__actions">
+              <Button variant="secondary" onClick={() => setSharing(false)}>
+                Отмена
+              </Button>
+              <Button onClick={() => void submitShare()} loading={sharingBusy}>
+                Отправить
               </Button>
             </div>
           </div>

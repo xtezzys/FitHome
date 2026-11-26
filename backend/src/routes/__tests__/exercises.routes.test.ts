@@ -116,11 +116,13 @@ describe('GET /api/exercises', () => {
     repo.listExercises.mockResolvedValue([[], 0]);
     const shared = await request(app).get('/api/exercises?scope=shared').set(...AUTH());
     expect(shared.status).toBe(200);
-    let [where] = repo.listExercises.mock.calls.at(-1) as never[];
+    // at(-1) возвращает кортеж аргументов | undefined — non-null assertion
+    // безопасна: вызов в строке выше гарантированно записан в mock.calls
+    let [where] = repo.listExercises.mock.calls.at(-1)!;
     expect((where as { AND: unknown[] }).AND).toContainEqual({ userId: null });
 
     await request(app).get('/api/exercises?scope=mine').set(...AUTH());
-    [where] = repo.listExercises.mock.calls.at(-1) as never[];
+    [where] = repo.listExercises.mock.calls.at(-1)!;
     expect((where as { AND: unknown[] }).AND).toContainEqual({ userId: 1 });
   });
 

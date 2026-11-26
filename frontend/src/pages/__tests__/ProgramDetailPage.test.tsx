@@ -66,6 +66,9 @@ function makeProgram(overrides: Partial<Program> = {}): Program {
     description: 'Описание',
     place: 'home',
     isActive: true,
+    isPublic: false,
+    publishedAt: null,
+    authorName: null,
     createdAt: '2026-11-11T10:00:00.000Z',
     exercises: [
       {
@@ -75,6 +78,7 @@ function makeProgram(overrides: Partial<Program> = {}): Program {
         targetReps: 15,
         targetWeight: null,
         targetDuration: null,
+        restSec: 90,
         exercise: ex,
       },
       {
@@ -84,6 +88,7 @@ function makeProgram(overrides: Partial<Program> = {}): Program {
         targetReps: null,
         targetWeight: null,
         targetDuration: 30,
+        restSec: 60,
         exercise: makeExercise({ id: 101, name: 'Планка', metric: 'time' }),
       },
     ],
@@ -124,7 +129,8 @@ describe('ProgramDetailPage — загрузка', () => {
     renderPage(makeProgram());
     expect(await screen.findByText('Моя программа')).toBeInTheDocument();
     expect(screen.getByText(/3 × 15/)).toBeInTheDocument();
-    expect(screen.getByText(/Время · 2 × 30 сек/)).toBeInTheDocument();
+    expect(screen.getByText(/3 × 15 · отдых 90 с/)).toBeInTheDocument();
+    expect(screen.getByText(/Время · 2 × 30 сек · отдых 60 с/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Из каталога' })).toBeInTheDocument();
   });
 

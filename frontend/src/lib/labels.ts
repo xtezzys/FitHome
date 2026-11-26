@@ -59,18 +59,26 @@ export function label(map: Record<string, string>, token: string): string {
   return map[token] ?? token;
 }
 
-/** Целевая нагрузка в виде «3 × 15», «3 × 15 × 40 кг» или «3 × 40 сек». */
+/**
+ * Целевая нагрузка в виде «3 × 15», «3 × 15 × 40 кг» или «3 × 40 сек».
+ * Если задан перерыв между подходами — добавляется «· отдых N с».
+ */
 export function formatTargets(target: {
   targetSets: number;
   targetReps: number | null;
   targetWeight: number | null;
   targetDuration: number | null;
+  restSec?: number | null;
 }): string {
+  let base: string;
   if (target.targetDuration !== null) {
-    return `${target.targetSets} × ${target.targetDuration} сек`;
+    base = `${target.targetSets} × ${target.targetDuration} сек`;
+  } else if (target.targetWeight !== null) {
+    base = `${target.targetSets} × ${target.targetReps} × ${target.targetWeight} кг`;
+  } else {
+    base = `${target.targetSets} × ${target.targetReps ?? '—'}`;
   }
-  if (target.targetWeight !== null) {
-    return `${target.targetSets} × ${target.targetReps} × ${target.targetWeight} кг`;
-  }
-  return `${target.targetSets} × ${target.targetReps ?? '—'}`;
+  return target.restSec === undefined || target.restSec === null
+    ? base
+    : `${base} · отдых ${target.restSec} с`;
 }

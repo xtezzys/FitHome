@@ -64,6 +64,7 @@ function makePe(exercise: ReturnType<typeof makeExercise>, overrides: Partial<Re
     targetReps: 15,
     targetWeight: null,
     targetDuration: null,
+    restSec: 90,
     exercise,
     ...overrides,
   };
@@ -207,9 +208,27 @@ describe('program.service — addProgramExercise', () => {
 
     const dto = await programService.addProgramExercise(USER, 50, { exerciseId: shared.id, targetSets: 3, targetReps: 10 });
     expect(repo.createProgramExercise).toHaveBeenCalledWith(
-      expect.objectContaining({ programId: 50, exerciseId: shared.id, order: 2 }),
+      expect.objectContaining({ programId: 50, exerciseId: shared.id, order: 2, restSec: 90 }),
     );
     expect(dto.order).toBe(2);
+  });
+
+  it('перерыв между подходами: явное значение сохраняется, по умолчанию — 90 сек', async () => {
+    repo.findProgramById.mockResolvedValue(program as never);
+    exRepo.findExerciseById.mockResolvedValue(shared as never);
+    repo.findMaxProgramExerciseOrder.mockResolvedValue(1);
+    repo.findProgramExerciseByOrder.mockResolvedValue(null);
+    repo.createProgramExercise.mockResolvedValue(makePe(shared, { restSec: 45 }) as never);
+
+    await programService.addProgramExercise(USER, 50, {
+      exerciseId: shared.id,
+      targetSets: 3,
+      targetReps: 10,
+      restSec: 45,
+    });
+    expect(repo.createProgramExercise).toHaveBeenLastCalledWith(
+      expect.objectContaining({ restSec: 45 }),
+    );
   });
 
   it('занятая позиция order → 400', async () => {
@@ -262,6 +281,43 @@ describe('program.service — addProgramExercise', () => {
     await expect(
       programService.addProgramExercise(USER, 50, { exerciseId: 100, targetSets: 3, targetDuration: 40 }),
     ).resolves.toBeTruthy();
+  });
+});
+
+describe('program.service — updateProgramExercise', () => {
+  const shared = makeExercise();
+  const program = makeProgram([makePe(shared)], { id: 50, userId: USER });
+  const row = makePe(shared, { id: 500, restSec: 90 });
+
+  it('обновление только restSec: остальные цели не затираются, restSec уходит в репозиторий', async () => {
+    repo.findProgramById.mockResolvedValue(program as never);
+    repo.findProgramExerciseById.mockResolvedValue(row as never);
+    repo.updateProgramExercise.mockResolvedValue({ ...row, restSec: 45 } as never);
+
+    const dto = await programService.updateProgramExercise(USER, 50, 500, { restSec: 45 });
+
+    expect(repo.updateProgramExercise).toHaveBeenCalledWith(500, { restSec: 45 });
+    expect(dto.restSec).toBe(45);
+  });
+
+  it('restSec обновляется вместе с остальными полями', async () => {
+    repo.findProgramById.mockResolvedValue(program as never);
+    repo.findProgramExerciseById.mockResolvedValue(row as never);
+    repo.updateProgramExercise.mockResolvedValue(
+      { ...row, targetSets: 4, targetReps: 20, restSec: 30 } as never,
+    );
+
+    await programService.updateProgramExercise(USER, 50, 500, {
+      targetSets: 4,
+      targetReps: 20,
+      restSec: 30,
+    });
+
+    expect(repo.updateProgramExercise).toHaveBeenCalledWith(500, {
+      targetSets: 4,
+      targetReps: 20,
+      restSec: 30,
+    });
   });
 });
 

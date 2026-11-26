@@ -30,6 +30,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           <NavLink to="/programs" className={({ isActive }) => `layout__link${isActive ? ' layout__link--active' : ''}`}>
             Программы
           </NavLink>
+          <NavLink to="/library" className={({ isActive }) => `layout__link${isActive ? ' layout__link--active' : ''}`}>
+            Библиотека
+          </NavLink>
+          <NavLink to="/programs/incoming" className={({ isActive }) => `layout__link${isActive ? ' layout__link--active' : ''}`}>
+            Полученные
+          </NavLink>
         </nav>
         <div className="layout__user">
           <span className="layout__username">{user?.name}</span>

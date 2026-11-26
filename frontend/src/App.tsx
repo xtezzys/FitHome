@@ -7,6 +7,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ExercisesPage } from './pages/ExercisesPage';
 import { ProgramsPage } from './pages/ProgramsPage';
 import { ProgramDetailPage } from './pages/ProgramDetailPage';
+import { LibraryPage } from './pages/LibraryPage';
+import { IncomingSharesPage } from './pages/IncomingSharesPage';
 import './App.css';
 
 /**
@@ -92,6 +94,23 @@ function App() {
             element={
               <RequireAuth>
                 <ProgramDetailPage />
+              </RequireAuth>
+            }
+          />
+          {/* Этап 5: публичная библиотека и полученные программы */}
+          <Route
+            path="/library"
+            element={
+              <RequireAuth>
+                <LibraryPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/programs/incoming"
+            element={
+              <RequireAuth>
+                <IncomingSharesPage />
               </RequireAuth>
             }
           />

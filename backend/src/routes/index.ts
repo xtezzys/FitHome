@@ -3,6 +3,8 @@ import * as authController from '../controllers/auth.controller.js';
 import * as userController from '../controllers/user.controller.js';
 import { exercisesRouter } from './exercises.routes.js';
 import { programsRouter } from './programs.routes.js';
+import { workoutsRouter } from './workouts.routes.js';
+import { statsRouter } from './stats.routes.js';
 import { requireAuth } from '../middlewares/auth.middleware.js';
 
 /**
@@ -39,3 +41,9 @@ apiRouter.use('/exercises', exercisesRouter);
 
 // /api/programs — программы и состав (docs/api.md §4, этап 3)
 apiRouter.use('/programs', programsRouter);
+
+// /api/workouts — тренировки, автосохранение, история (docs/api.md §5, этап 4)
+apiRouter.use('/workouts', workoutsRouter);
+
+// /api/stats — сводка и история упражнения (docs/api.md §6, этап 4.4)
+apiRouter.use('/stats', statsRouter);

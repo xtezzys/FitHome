@@ -30,7 +30,11 @@ import { runVerify } from '../prisma/verify-stage3.js';
 
 const backendDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const prismaCli = path.join(backendDir, 'node_modules', 'prisma', 'build', 'index.js');
-const schemaPath = path.join(backendDir, 'prisma', 'schema.prisma');
+// Изоляция набора миграций (вариант А): при заданном STAGE3_SCHEMA_PATH
+// оркестратор работает с временной копией схемы, рядом с которой лежит папка
+// migrations только с миграциями этапа 3 — общие миграции последующих этапов
+// (например, stage4) не применяются. По умолчанию — общая схема (как раньше).
+const schemaPath = process.env.STAGE3_SCHEMA_PATH ?? path.join(backendDir, 'prisma', 'schema.prisma');
 
 const MIGRATION_B = '20261112000100_stage3_exercises_programs_rebuild';
 
@@ -121,6 +125,7 @@ async function main(): Promise<void> {
     fail('переменная STAGE3_DATABASE_URL не задана. Пример: STAGE3_DATABASE_URL="file:./dev.db" npm run stage3:migrate');
   }
   console.log(`[stage3-migrate] Целевая БД: ${target}`);
+  console.log(`[stage3-migrate] Схема/миграции: ${schemaPath}`);
 
   // 1. Preflight: версии prisma и @prisma/client должны совпадать
   const prismaVersion = JSON.parse(fs.readFileSync(path.join(backendDir, 'node_modules', 'prisma', 'package.json'), 'utf8')).version as string;

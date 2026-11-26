@@ -20,6 +20,7 @@ export function ProgramCard({ program, children }: ProgramCardProps) {
         <h3 className="program-card__name">{program.name}</h3>
         <span className="program-card__place">{label(PLACE_LABELS, program.place)}</span>
       </div>
+      {program.authorName && <p className="program-card__author">Автор: {program.authorName}</p>}
       {program.description && <p className="program-card__description">{program.description}</p>}
       <p className="program-card__count">
         {program.exercisesCount ?? program.exercises?.length ?? 0} упражнений

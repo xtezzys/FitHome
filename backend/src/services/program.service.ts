@@ -2,11 +2,17 @@ import type { Prisma } from '@prisma/client';
 import type {
   AddProgramExerciseDto,
   CreateProgramDto,
+  IncomingShareDetailDto,
+  IncomingShareDto,
+  OutgoingShareDto,
   PaginationMeta,
   ProgramDto,
   ProgramExerciseDto,
   ProgramListQuery,
+  ProgramShareCreatedDto,
+  PublicProgramListQuery,
   ReorderDto,
+  ShareProgramDto,
   UpdateProgramDto,
   UpdateProgramExerciseDto,
 } from '../types/dto.js';
@@ -14,6 +20,7 @@ import { AppError } from '../types/errors.js';
 import { csvToArray } from '../lib/normalize.js';
 import * as exerciseRepo from '../repositories/exercise.repository.js';
 import * as programRepo from '../repositories/program.repository.js';
+import * as userRepo from '../repositories/user.repository.js';
 
 /**
  * Бизнес-логика программ (docs/api.md §4).
@@ -22,9 +29,14 @@ import * as programRepo from '../repositories/program.repository.js';
  * каждого упражнения; транзакция исключает частично созданную копию.
  */
 
-type ProgramRow = Prisma.ProgramGetPayload<{ include: { _count: { select: { exercises: true } } } }>;
+type ProgramRow = Prisma.ProgramGetPayload<{
+  include: { _count: { select: { exercises: true } }; user: { select: { name: true } } };
+}>;
 type ProgramDetailRow = Prisma.ProgramGetPayload<{
-  include: { exercises: { include: { exercise: true } } };
+  include: {
+    exercises: { include: { exercise: true } };
+    user: { select: { name: true } };
+  };
 }>;
 type ProgramExerciseRow = Prisma.ProgramExerciseGetPayload<{ include: { exercise: true } }>;
 
@@ -51,6 +63,7 @@ function programExerciseToDto(row: ProgramExerciseRow): ProgramExerciseDto {
     targetReps: row.targetReps,
     targetWeight: row.targetWeight === null ? null : Number(row.targetWeight),
     targetDuration: row.targetDuration,
+    restSec: row.restSec,
     exercise: exerciseToDto(row.exercise),
   };
 }
@@ -67,6 +80,9 @@ function programToDto(
     description: row.description,
     place: row.place,
     isActive: row.isActive,
+    isPublic: row.isPublic ?? false,
+    publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+    authorName: row.user?.name ?? null,
     ...(withExercises
       ? {
           exercises: (detail.exercises ?? []).map(programExerciseToDto),
@@ -98,13 +114,13 @@ export async function listPrograms(
   };
 }
 
-/** GET /api/programs/:id — своя или готовая; чужая персональная → 403. */
+/** GET /api/programs/:id — своя, готовая или опубликованная; чужая личная → 403. */
 export async function getProgram(userId: number, id: number): Promise<ProgramDto> {
   const row = await programRepo.findProgramById(id);
   if (!row) {
     throw new AppError('NOT_FOUND', 'Программа не найдена');
   }
-  if (row.userId !== null && row.userId !== userId) {
+  if (row.userId !== null && row.userId !== userId && !row.isPublic) {
     throw new AppError('FORBIDDEN', 'Программа принадлежит другому пользователю');
   }
   return programToDto(row, true);
@@ -139,11 +155,21 @@ export async function createProgram(userId: number, dto: CreateProgramDto): Prom
   return programToDto(detail as ProgramDetailRow, true);
 }
 
-/** PUT /api/programs/:id — изменение своей программы. */
+/**
+ * PUT /api/programs/:id — изменение своей программы; isPublic управляет
+ * публикацией (publishedAt выставляет только сервер).
+ */
 export async function updateProgram(userId: number, id: number, dto: UpdateProgramDto): Promise<ProgramDto> {
   const row = await programRepo.findProgramById(id);
-  requireOwnedProgram(row, userId);
-  await programRepo.updateProgram(id, dto);
+  const owned = requireOwnedProgram(row, userId);
+  const data: programRepo.UpdateProgramData = { ...dto };
+  if (dto.isPublic === true && owned.publishedAt === null) {
+    data.publishedAt = new Date();
+  }
+  if (dto.isPublic === false) {
+    data.publishedAt = null;
+  }
+  await programRepo.updateProgram(id, data);
   const detail = await programRepo.findProgramById(id);
   return programToDto(detail as ProgramDetailRow, true);
 }
@@ -156,19 +182,16 @@ export async function deleteProgram(userId: number, id: number): Promise<void> {
 }
 
 /**
- * POST /api/programs/:id/copy — клонирование готовой или своей программы
- * в аккаунт. Транзакция: при недоступности любого упражнения откат
- * исключает частично созданную копию (docs/api.md §4).
+ * Независимая копия программы в аккаунт пользователя: новая Program и новые
+ * ProgramExercise. При skipInaccessible упражнения, недоступные получателю
+ * (персональные автора), пропускаются — иначе сохранение чужой программы
+ * было бы невозможно; иначе — 403 (поведение copyProgram).
  */
-export async function copyProgram(userId: number, id: number): Promise<ProgramDto> {
-  const source = await programRepo.findProgramById(id);
-  if (!source) {
-    throw new AppError('NOT_FOUND', 'Программа не найдена');
-  }
-  if (source.userId !== null && source.userId !== userId) {
-    throw new AppError('FORBIDDEN', 'Программа принадлежит другому пользователю');
-  }
-
+async function cloneProgram(
+  userId: number,
+  source: ProgramDetailRow,
+  skipInaccessible = false,
+): Promise<ProgramDto> {
   const newId = await programRepo.runTransaction(async (tx) => {
     const copy = await programRepo.createProgram(
       {
@@ -180,20 +203,25 @@ export async function copyProgram(userId: number, id: number): Promise<ProgramDt
       },
       tx,
     );
+    let order = 0;
     for (const pe of source.exercises) {
-      // Доступность упражнения: общее или персональное текущего пользователя
       if (pe.exercise.userId !== null && pe.exercise.userId !== userId) {
+        if (skipInaccessible) {
+          continue;
+        }
         throw new AppError('FORBIDDEN', 'Программа содержит персональное упражнение другого пользователя');
       }
+      order += 1;
       await programRepo.createProgramExercise(
         {
           programId: copy.id,
           exerciseId: pe.exerciseId,
-          order: pe.order,
+          order,
           targetSets: pe.targetSets,
           targetReps: pe.targetReps,
           targetWeight: pe.targetWeight === null ? null : Number(pe.targetWeight),
           targetDuration: pe.targetDuration,
+          restSec: pe.restSec,
         },
         tx,
       );
@@ -203,6 +231,18 @@ export async function copyProgram(userId: number, id: number): Promise<ProgramDt
 
   const detail = await programRepo.findProgramById(newId);
   return programToDto(detail as ProgramDetailRow, true);
+}
+
+/** POST /api/programs/:id/copy — копия готовой, своей или опубликованной программы. */
+export async function copyProgram(userId: number, id: number): Promise<ProgramDto> {
+  const source = await programRepo.findProgramById(id);
+  if (!source) {
+    throw new AppError('NOT_FOUND', 'Программа не найдена');
+  }
+  if (source.userId !== null && source.userId !== userId && !source.isPublic) {
+    throw new AppError('FORBIDDEN', 'Программа принадлежит другому пользователю');
+  }
+  return cloneProgram(userId, source);
 }
 
 /**
@@ -272,6 +312,7 @@ export async function addProgramExercise(
     targetReps: dto.targetReps ?? null,
     targetWeight: dto.targetWeight ?? null,
     targetDuration: dto.targetDuration ?? null,
+    restSec: dto.restSec ?? 90,
   });
   return programExerciseToDto(row as ProgramExerciseRow);
 }
@@ -313,6 +354,7 @@ export async function updateProgramExercise(
     ...(dto.targetReps !== undefined ? { targetReps: dto.targetReps } : {}),
     ...(dto.targetWeight !== undefined ? { targetWeight: dto.targetWeight } : {}),
     ...(dto.targetDuration !== undefined ? { targetDuration: dto.targetDuration } : {}),
+    ...(dto.restSec !== undefined ? { restSec: dto.restSec } : {}),
   });
   return programExerciseToDto(updated as ProgramExerciseRow);
 }
@@ -384,4 +426,131 @@ export async function removeProgramExercise(
       expected += 1;
     }
   });
+}
+
+// ─── Этап 5: публичная библиотека и отправка программ ───
+
+/**
+ * GET /api/programs/public — только добровольно опубликованные личные программы.
+ * Поиск по названию выполняется в памяти (кириллица корректна без nameLower).
+ */
+export async function listPublicPrograms(
+  query: PublicProgramListQuery,
+): Promise<{ data: ProgramDto[]; meta: PaginationMeta }> {
+  const rows = await programRepo.findPublicPrograms(query.place);
+  const search = query.search?.toLowerCase();
+  const filtered = search
+    ? rows.filter((row) => row.name.toLowerCase().includes(search))
+    : rows;
+  const start = (query.page - 1) * query.limit;
+  const pageRows = filtered.slice(start, start + query.limit);
+  return {
+    data: pageRows.map((row) => programToDto(row, false)),
+    meta: { page: query.page, limit: query.limit, total: filtered.length },
+  };
+}
+
+/**
+ * POST /api/programs/:id/share — отправка своей программы по email.
+ * Получатель получает независимую копию только после сохранения.
+ */
+export async function shareProgram(
+  userId: number,
+  programId: number,
+  dto: ShareProgramDto,
+): Promise<ProgramShareCreatedDto> {
+  requireOwnedProgram(await programRepo.findProgramById(programId), userId);
+  const recipient = await userRepo.findUserByEmail(dto.email);
+  if (!recipient) {
+    throw new AppError('NOT_FOUND', 'Пользователь с таким email не найден');
+  }
+  if (recipient.id === userId) {
+    throw new AppError('VALIDATION_ERROR', 'Нельзя отправить программу самому себе');
+  }
+  if (await programRepo.findPendingShare(programId, recipient.id)) {
+    throw new AppError('CONFLICT', 'Программа уже отправлена этому пользователю');
+  }
+
+  const share = await programRepo.createProgramShare({
+    programId,
+    fromUserId: userId,
+    toUserId: recipient.id,
+  });
+  return {
+    id: share.id,
+    programId,
+    toUserName: recipient.name,
+    status: share.status,
+    createdAt: share.createdAt.toISOString(),
+  };
+}
+
+/** GET /api/programs/shares/incoming — полученные программы. */
+export async function listIncomingShares(userId: number): Promise<IncomingShareDto[]> {
+  const rows = await programRepo.listIncomingShares(userId);
+  return rows.map((row) => ({
+    id: row.id,
+    programId: row.programId,
+    programName: row.program.name,
+    fromUserName: row.fromUser.name,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
+/** GET /api/programs/shares/outgoing — отправленные программы. */
+export async function listOutgoingShares(userId: number): Promise<OutgoingShareDto[]> {
+  const rows = await programRepo.listOutgoingShares(userId);
+  return rows.map((row) => ({
+    id: row.id,
+    programId: row.programId,
+    programName: row.program.name,
+    toUserName: row.toUser.name,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
+/** GET /api/programs/shares/:shareId — просмотр полученной программы (только получатель). */
+export async function getIncomingShare(
+  userId: number,
+  shareId: number,
+): Promise<IncomingShareDetailDto> {
+  const share = await programRepo.findProgramShareById(shareId);
+  if (!share || share.toUserId !== userId) {
+    throw new AppError('NOT_FOUND', 'Передача программы не найдена');
+  }
+  return {
+    shareId: share.id,
+    fromUserName: share.fromUser.name,
+    status: share.status,
+    program: programToDto(share.program as ProgramDetailRow, true),
+  };
+}
+
+/**
+ * POST /api/programs/shares/:shareId/save — независимая копия полученной
+ * программы в библиотеку получателя; оригинал и его изменения не влияют.
+ */
+export async function saveSharedProgram(userId: number, shareId: number): Promise<ProgramDto> {
+  const share = await programRepo.findProgramShareById(shareId);
+  if (!share || share.toUserId !== userId) {
+    throw new AppError('NOT_FOUND', 'Передача программы не найдена');
+  }
+  if (share.status === 'saved') {
+    throw new AppError('CONFLICT', 'Программа уже сохранена в вашу библиотеку');
+  }
+
+  const copy = await cloneProgram(userId, share.program as ProgramDetailRow, true);
+  await programRepo.updateProgramShareStatus(shareId, 'saved');
+  return copy;
+}
+
+/** DELETE /api/programs/shares/:shareId — получатель убирает передачу из списка. */
+export async function deleteIncomingShare(userId: number, shareId: number): Promise<void> {
+  const share = await programRepo.findProgramShareById(shareId);
+  if (!share || share.toUserId !== userId) {
+    throw new AppError('NOT_FOUND', 'Передача программы не найдена');
+  }
+  await programRepo.deleteProgramShare(shareId);
 }
