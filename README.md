@@ -121,8 +121,4 @@ FitHome/
 4. [`docs/design.md`](docs/design.md) — структура интерфейса, адаптивность, UX-потоки.
 5. [`docs/testing.md`](docs/testing.md) — стратегия тестирования на Vitest.
 
-## Требования
-
-- Node.js >= 20
-- npm >= 10
 
